@@ -1,0 +1,62 @@
+name: Personal_blog Deploy
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build project (validation only)
+        run: |
+          npm ci
+          npm run build
+        # 此步骤仅用于提前发现构建错误，构建产物不会被使用
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e  # 遇到错误立即退出
+
+            # 定义项目路径（请替换为你的实际路径）
+            PROJECT_DIR="/var/www/personal-blog"
+            REPO_URL="git@github.com:yanchengfang/personal-blog.git"  # 请替换为你的仓库 SSH 地址
+
+            # 如果目录不存在，则克隆仓库
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "目录不存在，正在克隆仓库..."
+              git clone "$REPO_URL" "$PROJECT_DIR"
+            else
+              echo "目录已存在，进入目录并拉取最新代码..."
+            fi
+
+            cd "$PROJECT_DIR"
+
+            # 拉取最新代码（如果是刚克隆的,git pull 也可以工作）
+            git pull origin master
+
+            # 安装依赖并构建
+            npm ci
+            npm run build
+
+            # PM2 进程管理
+            if pm2 describe personal-blog > /dev/null 2>&1; then
+              pm2 reload personal-blog --update-env
+            else
+              PORT=3000 pm2 start npm --name personal-blog -- run serve
+            fi
+
+            pm2 save
