@@ -1,0 +1,429 @@
+---
+title: "v1 版本的新特性"
+date: 2021-08-07T15:32:14Z
+lastmod: "2021-02-01"
+tags:
+  - "log"
+draft: false
+summary: "概览 v1 版本发布的新特性 - 代码块复制、多作者支持、Frontmatter 布局配置等"
+layout: PostSimple
+bibliography: references-data.bib
+---
+
+## 概览
+
+关于 v1.0 中引入的新特性的文章。新特性包括：
+
+<TOCInline toc={props.toc} exclude="概览" toHeading={2} />
+
+尽管添加了所有新功能，但首屏加载 JS 从 43kB 减少到了 39kB！ [^1]
+
+[^1]: 随着 Next.js 12 的新变化，首屏加载 JS 增加到了 45kB。
+
+如果你是从模板的 v0 版本迁移过来的，请参阅下面的[升级指南](#升级指南)。
+
+## 主题颜色
+
+你可以通过更改 tailwind 配置文件中的 primary 属性来轻松修改主题颜色：
+
+```js:tailwind.config.js
+theme: {
+    colors: {
+      primary: colors.teal,
+      gray: colors.neutral,
+      ...
+    }
+  ...
+}
+```
+
+primary 颜色属性应分配一个对象，其键为 50, 100, 200 ... 900，并对应相应的颜色代码值。
+
+Tailwind 包含了非常棒的默认调色板，可用于为你的网站设置主题。查看[自定义颜色文档页面](https://tailwindcss.com/docs/customizing-colors)以了解完整的选项范围。
+
+从 v1 迁移？你可以通过将 `primary` 设置为 `colors.sky`（Tailwind 2.2.2 及以上版本，否则为 `colors.lightBlue`）并将 gray 更改为 `colors.gray` 来恢复到之前的主题。
+
+从 v1.1.2+ 开始，你还可以通过修改 `css/prism.css` 样式表轻松自定义代码块的样式。Token 类名与 prismjs 兼容，因此你可以从 prismjs 样式表中复制并调整 token 样式，例如 [prism themes](https://github.com/PrismJS/prism-themes)。
+
+## Xdm MDX 编译器
+
+我们将 MDX 打包工具从 [next-mdx-remote](https://github.com/hashicorp/next-mdx-remote) 切换到了 [mdx-bundler](https://github.com/kentcdodds/mdx-bundler)。它在底层使用了 [xdm](https://github.com/wooorm/xdm)，以及最新的 micromark 3 和 remark、rehype 库。
+
+**警告：** 如果你使用的是自定义的 remark 或 rehype 库，请升级到兼容 micromark 3 的版本。如果你正在升级，请删除 `node_modules` 和 `package-lock.json` 以避免出现以往依赖项相关的错误。
+
+[xdm](https://github.com/wooorm/xdm) 相比 next-mdx-remote 内部使用的编译器 [@mdx-js/mdx](https://github.com/mdx-js/mdx) 包含多项改进，但可能会有一些破坏性的行为变化。请检查你的 markdown 输出以进行验证。
+
+一些新的可能性包括：使用 import 语法直接在 mdx 文件中加载组件，以及包含可在构建步骤编译和打包的 js 代码。
+
+例如，以下 jsx 片段可以直接在 MDX 文件中用于渲染页面标题组件：
+
+```jsx
+// 如果你使用 js，则导入 PageTitle from './components/PageTitle.js'
+import PageTitle from "./components/PageTitle.tsx";
+<PageTitle> 在 MDX 中使用 JSX 组件 </PageTitle>;
+```
+
+默认配置会相对于 `components` 目录解析所有组件。
+
+**注意**：
+需要外部图像加载器的组件还需要额外的 esbuild 配置。
+依赖于全局应用状态或生命周期的组件（如 Next.js 的 `Link` 组件）也无法在此设置下工作，因为每个 mdx 文件都是独立构建的。对于此类情况，最好使用组件替换（component substitution）。
+
+## 目录（TOC）组件
+
+受 [Docusaurus](https://docusaurus.io/docs/next/markdown-features/inline-toc) 和 Gatsby 的 [gatsby-remark-table-of-contents](https://www.gatsbyjs.com/plugins/gatsby-remark-table-of-contents/) 启发，包含文档所有顶级标题的 `toc` 变量会被传递给 MDX 文件，并可以进行相应样式设置。为了简化目录（TOC）的生成，你可以使用现有的 `TOCInline` 组件。
+
+例如，这篇文章中的 TOC 是使用以下代码生成的：
+
+```jsx
+<TOCInline toc={props.toc} exclude="概览" toHeading={2} />
+```
+
+你可以通过配置 `fromHeading` 和 `toHeading` 属性来筛选显示的标题，或者通过向 `exclude` 属性传递字符串或字符串数组来排除特定标题。默认情况下，深度为 3 或更小的所有标题都会缩进。这可以通过更改 `indentDepth` 属性来配置。可以使用 `asDisclosure` 属性在可展开的 disclosure 元素中渲染 TOC。
+
+这是在 disclosure 元素中渲染的完整 TOC。
+
+```jsx
+<TOCInline toc={props.toc} asDisclosure />
+```
+
+<TOCInline toc={props.toc} asDisclosure />
+
+## 布局（Layouts）
+
+你可以通过配置 frontmatter 字段将 mdx 博客内容映射到布局组件。例如，这篇文章就是使用新的 `PostSimple` 布局编写的！
+
+### 添加新模板
+
+布局模板存储在 `./layouts` 文件夹中。你可以将要映射到 markdown 内容的 React 组件添加到此文件夹中。组件文件名必须与 markdown frontmatter 的 `layout` 字段中指定的名称匹配。
+
+唯一必需的字段是 `children`，它包含渲染后的 MDX 内容，尽管你可能还希望传入 frontMatter 内容并在模板中进行渲染。
+
+你可以配置模板以接收其他字段 - 请参阅 `PostLayout` 组件作为示例。
+
+这是一个你可以进一步自定义的示例布局：
+
+```jsx
+export default function ExampleLayout({ frontMatter, children }) {
+  const { date, title } = frontMatter;
+
+  return (
+    <SectionContainer>
+      <div>{date}</div>
+      <h1>{title}</h1>
+      <div>{children}</div>
+    </SectionContainer>
+  );
+}
+```
+
+### 配置博客文章的 frontmatter
+
+使用 `layout` frontmatter 字段指定你要将 markdown 文章映射到的模板。以下是这篇文章的 frontmatter 示例：
+
+```
+---
+title: 'v1 版本的新特性'
+date: '2021-05-26   '
+tags: ['next-js', 'tailwind', 'guide']
+draft: false
+summary: '介绍新的布局功能 - 你可以通过配置 frontmatter 字段将 mdx 博客内容映射到布局组件'
+layout: PostSimple
+---
+```
+
+你可以通过修改 `DEFAULT_LAYOUT` 变量在相应的页面部分配置默认布局。博客文章页面的 `DEFAULT_LAYOUT` 设置为 `PostLayout`。
+
+### 扩展
+
+`layout` 被映射到包裹整个 MDX 内容的 wrapper。
+
+```jsx
+export const MDXComponents = {
+  Image,
+  a: CustomLink,
+  pre: Pre,
+  wrapper: ({ components, layout, ...rest }) => {
+    const Layout = require(`../layouts/${layout}`).default;
+    return <Layout {...rest} />;
+  },
+};
+
+export const MDXLayoutRenderer = ({ layout, mdxSource, ...rest }) => {
+  const MDXLayout = useMemo(() => getMDXComponent(mdxSource), [mdxSource]);
+
+  return <MDXLayout layout={layout} components={MDXComponents} {...rest} />;
+};
+```
+
+在想要接受布局名称并映射到所需布局的页面上使用 `MDXLayoutRenderer` 组件。你需要从布局文件夹传递布局名称（必须完全匹配）。
+
+## 分析（Analytics）
+
+该模板现在支持 [plausible](https://plausible.io/)、[simple analytics](https://simpleanalytics.com/) 和 google analytics。使用与所需分析提供商相对应的设置配置 `siteMetadata.js`。
+
+```js
+analytics: {
+    // 支持 plausible, simpleAnalytics 或 googleAnalytics
+    plausibleDataDomain: '', // 例如 tailwind-nextjs-starter-blog.vercel.app
+    simpleAnalytics: false, // true 或 false
+    googleAnalyticsId: '', // 例如 UA-000000-2 或 G-XXXXXXX
+  },
+```
+
+还支持自定义事件。你可以从 `@components/analytics/[ANALYTICS-PROVIDER]` 文件导入 `logEvent` 函数，并在触发某些感兴趣的事件时调用它。*注意*：根据分析提供商的不同，可能需要额外的配置，请查看其官方文档以获取更多信息。
+
+## 博客评论系统
+
+我们还增加了对 [giscus](https://github.com/laymonage/giscus)、[utterances](https://github.com/utterance/utterances) 或 disqus 的支持。要启用，只需使用所需的提供商和设置配置 `siteMetadata.js` 的 comments 属性即可。
+
+```js
+comment: {
+    // 选择一个提供商并使用与之关联的环境变量
+    // https://vercel.com/docs/environment-variables
+    provider: 'giscus', // 支持的提供商：giscus, utterances, disqus
+    giscusConfig: {
+      // 访问下面的链接，并按照“配置”部分中的步骤操作
+      // https://giscus.app/
+      repo: process.env.NEXT_PUBLIC_GISCUS_REPO,
+      repositoryId: process.env.NEXT_PUBLIC_GISCUS_REPOSITORY_ID,
+      category: process.env.NEXT_PUBLIC_GISCUS_CATEGORY,
+      categoryId: process.env.NEXT_PUBLIC_GISCUS_CATEGORY_ID,
+      mapping: 'pathname', // 支持的选项：pathname, url, title
+      reactions: '1', // 表情反应：1 = 启用 / 0 = 禁用
+      // 定期向父窗口发送讨论元数据：1 = 启用 / 0 = 禁用
+      metadata: '0',
+      // 主题示例：light, dark, dark_dimmed, dark_high_contrast
+      // transparent_dark, preferred_color_scheme, custom
+      theme: 'light',
+      // 暗黑模式下的主题
+      darkTheme: 'transparent_dark',
+      // 如果上面的主题选项设置为 'custom`
+      // 请在下面提供指向你自定义主题 css 文件的链接。
+      // 示例：https://giscus.app/themes/custom_example.css
+      themeURL: '',
+    },
+    utterancesConfig: {
+      // 访问下面的链接，并按照“配置”部分中的步骤操作
+      // https://utteranc.es/
+      repo: process.env.NEXT_PUBLIC_UTTERANCES_REPO,
+      issueTerm: '', // 支持的选项：pathname, url, title
+      label: '', // 标签（可选）：Comment 💬
+      // 主题示例：github-light, github-dark, preferred-color-scheme
+      // github-dark-orange, icy-dark, dark-blue, photon-dark, boxy-light
+      theme: '',
+      // 暗黑模式下的主题
+      darkTheme: '',
+    },
+    disqus: {
+      // https://help.disqus.com/en/articles/1717111-what-s-a-shortname
+      shortname: process.env.NEXT_PUBLIC_DISQUS_SHORTNAME,
+    },
+  },
+```
+
+## 多作者支持
+
+作者信息现在从 `siteMetadata.js` 中分离出来，并作为 markdown 文件存储在各自的 `data/authors` 文件夹中。至少你需要有一个包含作者信息的 `default.md` 文件。你可以根据需要创建其他文件，文件名将用作对作者的引用。
+
+作者 markdown 文件的示例如下：
+
+```md:default.md
+---
+name: Tails Azimuth
+avatar: /static/images/avatar.png
+occupation: 大气科学教授
+company: 斯坦福大学
+email: address@yoursite.com
+twitter: https://twitter.com/Twitter
+linkedin: https://www.linkedin.com
+github: https://github.com
+---
+
+关于你自己的详细描述...
+```
+
+你可以在整个模板的多个地方使用这些信息。例如，在页面的关于（about）部分，我们使用这行代码获取默认作者信息：
+
+```js
+const authorDetails = await getFileBySlug("authors", ["default"]);
+```
+
+这在 `AuthorLayout` 模板中进行渲染。
+
+### 博客文章中的多作者
+
+博客文章的 frontmatter 接受一个可选的 `authors` 数组字段。如果未指定字段，则假定使用默认作者。只需传入一个作者数组即可渲染与文章关联的多个作者。
+
+例如，以下 frontmatter 将显示由 `data/authors/default.md` 和 `data/authors/sparrowhawk.md` 提供的作者：
+
+```yaml
+title: "我的第一篇文章"
+date: "2021-01-12"
+draft: false
+summary: "我的第一篇文章"
+authors: ["default", "sparrowhawk"]
+```
+
+多作者文章的演示在 [Introducing Tailwind Nextjs Starter Blog post](/blog/introducing-tailwind-nextjs-starter-blog) 中展示。
+
+## 代码块的复制按钮
+
+将鼠标悬停在代码块上，你会注意到一个受 GitHub 启发的复制按钮！你可以修改 `./components/Pre.js` 来进一步自定义它。该组件被传递给 `MDXComponents` 并修改所有 `<pre>` 块。
+
+## 行高亮和行号
+
+由于采用了新的 [rehype-prism-plus 插件](https://github.com/timlrx/rehype-prism-plus)，现在开箱即用地支持行高亮和行号。
+
+以下 javascript 代码块：
+
+````
+```js {1, 3-4} showLineNumbers
+var num1, num2, sum
+num1 = prompt('Enter first number')
+num2 = prompt('Enter second number')
+sum = parseInt(num1) + parseInt(num2) // "+" means "add"
+alert('Sum = ' + sum) // "+" means combine into a string
+```
+````
+
+将显示为：
+
+```js {1,3-4} showLineNumbers
+var num1, num2, sum;
+num1 = prompt("Enter first number");
+num2 = prompt("Enter second number");
+sum = parseInt(num1) + parseInt(num2); // "+" means "add"
+alert("Sum = " + sum); // "+" means combine into a string
+```
+
+要修改样式，请更改 `prism.css` 文件中的以下类选择器：
+
+```css
+.code-highlight {
+  @apply float-left min-w-full;
+}
+
+.code-line {
+  @apply -mx-4 block border-l-4 border-opacity-0 pl-4 pr-4;
+}
+
+.code-line.inserted {
+  @apply bg-green-500 bg-opacity-20;
+}
+
+.code-line.deleted {
+  @apply bg-red-500 bg-opacity-20;
+}
+
+.highlight-line {
+  @apply -mx-4 border-l-4 border-primary-500 bg-gray-700 bg-opacity-50;
+}
+
+.line-number::before {
+  @apply -ml-2 mr-4 inline-block w-4 text-right text-gray-400;
+  content: attr(line);
+}
+```
+
+## 订阅（Newsletter）组件 (v1.1.3)
+
+在 v1.1.3 中引入的订阅组件为你提供了一种轻松建立受众群体的方法。它与以下提供商集成：
+
+- [Mailchimp](https://mailchimp.com/)
+- [Buttondown](https://buttondown.email/)
+- [Convertkit](https://convertkit.com/)
+
+要使用它，请在配置文件中指定你正在使用的提供商，并将必要的环境变量添加到 `.env` 文件中。有关所需变量的更多信息，请查看 `.env.sample`。
+
+导出了两个组件：一个默认的 `NewsletterForm` 和一个 `BlogNewsletterForm` 组件，后者也被传入作为 MDX 组件，并可用于博客文章中：
+
+```jsx
+<BlogNewsletterForm title="喜欢你所阅读的内容吗？" />
+```
+
+<BlogNewsletterForm title="喜欢你所阅读的内容吗？" />
+
+该组件依赖于 Next.js 的 [API 路由](https://nextjs.org/docs/api-routes/introduction)，这需要设置 Next.js 的服务端实例，并且与 100% 静态站点导出不兼容。用户应该自托管或使用支持此功能的兼容平台，如 Vercel 或 Netlify。
+
+静态站点兼容的替代方案是将订阅组件中的路由替换为表单 API 端点提供商。
+
+## 参考文献和引用 (v1.2.1)
+
+在 v1.2.1 中，`rehype-citation` 插件被添加到 xdm 处理流水线中。这使你可以轻松地从现有的 bibtex 或 CSL-json 文件格式化引用并插入参考文献。
+
+例如，以下 markdown 代码示例：
+
+```md
+标准引用 [@Nash1950]
+文中引用 例如 @Nash1951
+多重引用 [见 @Nash1950; @Nash1951, 第 50 页]
+
+**参考文献：**
+
+[^ref]
+```
+
+渲染为以下内容：
+
+标准引用 [@Nash1950]  
+文中引用 例如 @Nash1951  
+多重引用 [见 @Nash1950; @Nash1951, 第 50 页]
+
+**参考文献：**
+
+[^ref]
+
+参考文献将插入在文档末尾，但可以通过在预期位置指定 `[^Ref]` 标签来覆盖。该插件使用 APA 引用格式，但也支持以下 CSL：'apa'、'vancouver'、'harvard1'、'chicago'、'mla'，或指向用户指定 CSL 文件的路径。
+
+有关配置选项的更多信息，请参阅 [rehype-citation readme](https://github.com/timlrx/rehype-citation)。
+
+## 自托管字体 (v1.5.0)
+
+Google 字体已被来自 [Fontsource](https://fontsource.org/) 的自托管字体取代。这带来了以下[优势](https://fontsource.org/docs/introduction)：
+
+> 自托管带来了显著的性能提升，因为从 Google Fonts 等托管服务加载字体会导致额外的（渲染阻塞）网络请求。从长远来看，对于简单的网站，视觉加载时间已被观察到会翻倍。
+>
+> 字体保持版本锁定。Google 经常在不通知的情况下推送字体更新，这可能会干扰你的实时生产项目。像管理任何其他 NPM 依赖项一样管理你的字体。
+>
+> 致力于隐私。Google 确实会跟踪其字体的显示使用情况，对于那些极度关注隐私的人来说，自托管是一个替代方案。
+
+这导致了更小的字体包和快 0.1 秒的加载时间（[webpagetest 比较](https://www.webpagetest.org/video/compare.php?tests=220201_AiDcFH_f68a69b758454dd52d8e67493fdef7da,220201_BiDcMC_bf2d53f14483814ba61e794311dfa771)）。
+
+更改默认的 Inter 字体：
+
+1. 安装首选[字体](https://fontsource.org/fonts) - `npm install -save @fontsource/<font-name>`
+2. 更新 `pages/_app.js` 中的导入 - `import '@fontsource/<font-name>.css'`
+3. 更新 tailwind css 配置文件中的 `fontfamily` 属性
+
+## 升级指南
+
+从 v0 到 v1，代码的很大一部分都发生了变化，包括对布局的支持和新的 mdx 引擎。
+
+如果之前的版本能满足你的需求，那么真的没有必要更换，而且将你感兴趣的组件更改复制到现有博客可能比迁移所有内容更容易。
+
+尽管如此，如果你想这样做并且没有对模板进行太多更改，你可以克隆新版本并将博客文章复制到新模板中。
+
+另一种选择是使用以下代码拉取最新的模板版本：
+
+```bash
+git remote add template git@github.com:timlrx/tailwind-nextjs-starter-blog.git
+git pull template v1 --allow-unrelated-histories
+rm -rf node_modules
+```
+
+你可以在我的个人博客的这个 [commit](https://github.com/timlrx/timlrx.com/commit/bba1c185384fd6d5cdaac15abf802fdcff027286) 中看到这种迁移的一个例子。
+
+v1 还使用 `feed.xml` 而不是 `index.xml`，以避免 Vercel 的一些构建问题。如果你正在迁移，你应该在 `next.config.js` 中添加如下重定向：
+
+```js
+async redirects() {
+  return [
+    {
+      source: '/:path/index.xml',
+      destination: '/:path/feed.xml',
+      permanent: true,
+    }
+  ]
+}
+```

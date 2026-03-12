@@ -1,0 +1,83 @@
+---
+title: 加拿大的照片
+date: "2017-07-15"
+tags: 
+  - "feature"
+draft: false
+layout: PostBanner
+images: ["/static/images/canada/mountains.jpg"]
+summary: 加拿大风景如画，有枫叶、白雪皑皑的山脉、碧绿的湖泊和多伦多。在这个照片画廊展览中欣赏美景，并了解如何借助MDX的魔力与顺风课程轻松复制这些美景。
+---
+
+加拿大风景如画，有枫叶、白雪皑皑的山脉、碧绿的湖泊和多伦多。在这个照片画廊展览中欣赏美景，并了解如何借助MDX的魔力与顺风课程轻松复制这些美景。
+
+使用`next/image`组件提供图片功能。本地存储的图片位于以下路径的文件夹中：`/static/images/canada/[filename].jpg`
+
+由于我们使用的是MDX，因此可以通过几个Tailwind CSS类来创建一个简单的响应式flexbox网格来展示我们的图片。
+
+---
+
+# 画廊
+
+<div className="-mx-2 flex flex-wrap overflow-hidden xl:-mx-2">
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Maple](/static/images/canada/maple.jpg)
+  </div>
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Lake](/static/images/canada/lake.jpg)
+  </div>
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Mountains](/static/images/canada/mountains.jpg)
+  </div>
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Toronto](/static/images/canada/toronto.jpg)
+  </div>
+</div>
+
+# 实现
+
+```js
+<div className="-mx-2 flex flex-wrap overflow-hidden xl:-mx-2">
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Maple](/static/images/canada/maple.jpg)
+  </div>
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Lake](/static/images/canada/lake.jpg)
+  </div>
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Mountains](/static/images/canada/mountains.jpg)
+  </div>
+  <div className="my-1 w-full overflow-hidden px-2 xl:my-1 xl:w-1/2 xl:px-2">
+    ![Toronto](/static/images/canada/toronto.jpg)
+  </div>
+</div>
+```
+
+使用MDX v2，可以在jsx中插入markdown，如示例代码所示。
+
+### 照片来源
+
+<div>
+  Maple photo by [Guillaume
+  Jaillet](https://unsplash.com/@i_am_g?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+  on
+  [Unsplash](https://unsplash.com/s/photos/canada?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+</div>
+<div>
+  Mountains photo by [John
+  Lee](https://unsplash.com/@john_artifexfilms?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+  on
+  [Unsplash](https://unsplash.com/s/photos/canada?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+</div>
+<div>
+  Lake photo by [Tj
+  Holowaychuk](https://unsplash.com/@tjholowaychuk?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+  on
+  [Unsplash](https://unsplash.com/s/photos/canada?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+</div>
+<div>
+  Toronto photo by [Matthew
+  Henry](https://unsplash.com/@matthewhenry?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+  on
+  [Unsplash](https://unsplash.com/s/photos/canada?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText)
+</div>

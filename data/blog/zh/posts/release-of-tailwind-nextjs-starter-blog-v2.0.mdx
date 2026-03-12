@@ -1,0 +1,193 @@
+---
+title: "个人博客 v2.0 发布"
+date: "2023-08-05"
+lastmod: "2023-08-05"
+tags:
+  - "log"
+draft: false
+summary: "Personal Blog 模板 v2.0 发布，使用 Nextjs App 目录和 React Server Components 进行了重构。探索新特性以及如何从 V1 迁移。"
+images: ["/static/images/twitter-card.png"]
+---
+
+## 引言
+
+欢迎使用 Tailwind Nextjs Starter Blog 模板 v2.0。此版本是对代码库的一次重大重构，旨在支持 Nextjs App 目录和 React Server Components。请继续阅读以了解新特性以及如何从 V1 迁移。
+
+<TOCInline toc={props.toc} exclude="引言" />
+
+## 从 V1 到 V2
+
+![Github Traffic](/static/images/github-traffic.png)
+
+该模板于 2021 年 1 月首次发布，至今已被数千名用户使用。它被收录在 [Next.js Templates](https://vercel.com/templates/next.js/tailwind-css-starter-blog)、[Tailwind Awesome](https://www.tailwindawesome.com/resources/tailwind-nextjs-starter-blog) 以及其他资源列表网站中。它每天吸引 200+ 独立访客，页面浏览量达到 1500-2000 次，拥有 1.3k 次 fork 和许多其他克隆。
+
+非常感谢用户和贡献者社区让这个模板取得成功！我制作了一个博客的小型视频集锦（在清理 readme 中的列表时），以展示使用该模板创建的博客的多样性，并庆祝这一里程碑：
+
+<video controls>
+  <source
+    src="https://github-production-user-asset-6210df.s3.amazonaws.com/28362229/258559849-2124c81f-b99d-4431-839c-347e01a2616c.webm"
+    type="video/webm"
+  />
+</video>
+
+版本 2 建立在先前版本的成功之上，并引入了许多新特性和改进。代码库已重构以支持 Next.js App 目录和 React Server Components。Markdown / MDX 现在使用 Contentlayer 进行处理，这是一个类型安全的内容 SDK，可以验证并将你的内容转换为类型安全的 JSON 数据。它集成了 Pliny，这是一个新库，提供开箱即用的 Next.js 组件，通过分析、评论和通讯订阅来增强你的静态网站。模板中还添加了一个新的命令面板 (⌘-k) 搜索组件。
+
+让我们深入了解 V2 中的新特性和改进。
+
+## Next.js App 目录和 React Server Components
+
+既然 [Next.js App router](https://nextjs.org/docs/app) 终于稳定了，并且大部分功能与 Page Router 兼容，代码库已迁移到新设置。这允许采用混合渲染方法，使用在服务器端生成的 React Server Components 以实现更快的页面加载和更小的包大小，同时保留在其中加入客户端 React 组件以实现交互性的能力。[^1]
+
+随着能力的增强，也带来了需要学习的[新范式](https://nextjs.org/docs/getting-started/react-essentials)。我已迁移代码库以尽可能利用新特性。这包括文件夹结构的更改、将组件拆分为服务端与客户端组件、利用服务端数据获取以及使用推荐的 [Metadata](https://nextjs.org/docs/app/building-your-application/optimizing/metadata) API 进行 SEO。
+
+虽然这在一定程度上简化了代码库，但也增加了从旧代码库迁移的难度。如果你打算迁移，我建议从一个全新的模板开始，然后复制你的自定义设置和现有内容。有关更多详细信息，请参阅[迁移建议](#迁移建议)部分。
+
+## Typescript 优先
+
+代码库已迁移到 Typescript。虽然先前版本的模板同时提供 Javascript 和 Typescript 版本，但我决定减轻维护负担并专注于 Typescript。这也允许在 IDE 中进行更好的类型检查和代码补全。
+
+Typescript 也是我们新的类型安全 markdown 处理器 Contentlayer 的完美搭档。
+
+## Contentlayer
+
+[Contentlayer](https://www.contentlayer.dev/) 是一个内容 SDK，它验证你的内容并将其转换为类型安全的 JSON 数据，你可以轻松地将其导入到应用程序中。它使处理本地 markdown 或 MDX 文件变得轻而易举。这取代了 `MDX-bundler` 和我们自己的 markdown 处理工作流。
+
+首先定义一个内容源，指定文档类型的名称、其所在位置、frontmatter 字段以及作为流程一部分生成的任何其他计算字段。
+
+```ts:contentlayer.config.ts
+export const Blog = defineDocumentType(() => ({
+  name: 'Blog',
+  filePathPattern: 'blog/**/*.mdx',
+  contentType: 'mdx',
+  fields: {
+    title: { type: 'string', required: true },
+    date: { type: 'date', required: true },
+    tags: { type: 'list', of: { type: 'string' }, default: [] },
+    ...
+  },
+  computedFields: {
+    readingTime: { type: 'json', resolve: (doc) => readingTime(doc.body.raw) },
+    slug: {
+      type: 'string',
+      resolve: (doc) => doc._raw.flattenedPath.replace(/^.+?(\/)/, ''),
+    }
+    ...
+  },
+}))
+```
+
+然后 Contentlayer 使用我们想要的 markdown remark 或 rehype 插件处理 MDX 文件，验证模式，生成类型定义并输出可以轻松导入到我们页面中的 json 文件。它开箱即用地支持热重载，因此对 markdown 文件的编辑将立即反映在浏览器中！
+
+## Pliny
+
+该模板广受欢迎的一个重要原因是其可定制性以及与从分析提供商到评论解决方案等其他服务的集成。然而，这意味着即使点用户不使用该功能，大量样板代码也必须放置在模板中。更新和错误修复必须手动复制到用户的代码库中。
+
+为了解决这个问题，我将逻辑抽象到了一个单独的存储库——[Pliny](https://github.com/timlrx/pliny)。Pliny 提供开箱即用的 Next.js 组件来增强静态网站：
+
+- 分析 (Analytics)
+  - Google Analytics
+  - Plausible Analytics
+  - Simple Analytics
+  - Umami Analytics
+  - Posthog
+- 评论 (Comments)
+  - Disqus
+  - Giscus
+  - Utterances
+- 通讯订阅 (Newsletter)（使用 Next 13 API 路由）
+  - Buttondown
+  - Convertkit
+  - Email Octopus
+  - Klaviyo
+  - Mailchimp
+  - Revue
+- 带有 tailwind 样式表的命令面板搜索
+  - Algolia
+  - Kbar（本地搜索）
+- UI 实用组件
+  - Bleed
+  - Newsletter / Blog Newsletter
+  - Pre / 代码块
+  - 目录 (Table of Contents)
+
+通过修改 `siteMetadata.js` 并更改相应字段来选择你喜欢的服务。例如，要从 Umami Analytics 更改为 Plausible，我们可以更改以下字段：
+
+```diff-js:siteMetadata.js
+analytics: {
+-   umamiAnalytics: {
+-     // We use an env variable for this site to avoid other users cloning our analytics ID
+-     umamiWebsiteId: process.env.NEXT_UMAMI_ID, // e.g. 123e4567-e89b-12d3-a456-426614174000
+-   },
++    plausibleAnalytics: {
++      plausibleDataDomain: '', // e.g. tailwind-nextjs-starter-blog.vercel.app
++    },
+},
+```
+
+配置文件中的更改会自动传播到组件。无需修改模板。
+
+在底层，Pliny 导出高级组件，如 `<Analytics analyticsConfig={analyticsConfig}/>` 和 `<Comments commentsConfig={commentsConfig}/>`，它们接收配置对象并渲染相应的组件。由于布局是在服务器端定义的，Next.js 能够使用配置对象确定要渲染哪个组件，并仅将所需的组件包发送给客户端。
+
+## 新的搜索组件
+
+在 2023 年，没有命令面板搜索栏的博客是不完整的。
+
+最受期待的功能之一已添加 🎉！搜索组件支持 2 个搜索提供商——Algolia 和 Kbar 本地搜索。
+
+### Algolia
+
+[Algolia Docsearch](https://docsearch.algolia.com/) 是许多文档网站使用的流行免费服务。它会自动抓取提交索引的网站，并通过漂亮的对话框模态窗口提供搜索结果。Pliny 组件在很大程度上受到 Docusaurus 实现的启发，并带有一个与 Tailwind CSS 主题兼容的样式表。
+
+### Kbar
+
+[Kbar](https://github.com/timc1/kbar) 是一个快速、便携且可扩展的 cmd+k 界面。Pliny 实现使用 kbar 创建一个本地搜索对话框。该组件加载一个在 contentlayer 构建过程中创建的 JSON 文件，默认为 `search.json`。尝试按下 ⌘-k 或 ctrl-k 看看搜索栏的效果吧！
+
+## 样式和布局更新
+
+### 主题
+
+`tailwind.config.js` 已更新，尽可能使用 tailwind typography 默认设置，并通过 `prose-invert` 类使用内置的深色模式支持。这取代了先前的 `prose-dark` 类和配置。
+
+主要主题颜色从 `teal` 更新为 `pink`，主要灰色主题从 `neutral` 更改为 `gray`。
+
+Inter 现已被 Space Grotesk 取代为默认字体。
+
+### 新布局
+
+`layouts` 目录中提供的布局组件提供了一种简单的方法来定制博客的外观。[^2]
+
+构建一个受欢迎的模板的缺点是你开始到处看到多个类似的网站 😆。虽然鼓励用户根据自己的喜好定制布局，但拥有更多易于切换的布局选项可以促进多样性，并可能成为进一步定制的一个良好起点。
+
+在 v2 中，我添加了一个新的文章布局——`PostBanner`。它具有一个大的横幅图片和一个居中的内容容器。查看“[Pictures of Canada](/blog/pictures-of-canada)”博客文章，它已更新为使用新布局。
+
+默认的博客列表布局也已更新，包含一个带有博客标签的侧边栏。先前布局中的搜索栏已被新的命令面板搜索取代。要切换回旧布局，只需将使用 `ListLayoutWithTags` 组件的页面更改回原始的 `ListLayout` 即可。
+
+## 迁移建议
+
+由于目录结构、设置和工具发生了巨大变化，我建议从一个全新的模板开始并复制现有内容，然后逐步将更改迁移到新模板。
+
+样式更改应该相对较小，可以从旧的 `tailwind.config.js` 复制到新的中。如果进行复制，你可能需要将 `prose-dark` 类添加回选择 tailwind typography 样式的组件中。请修改根布局组件中的字体导入以使用所需的字体。
+
+MDX 处理流水线和模式的更改可以轻松移植到新的 Contentlayer 设置中。如果 frontmatter 字段发生更改，你可以修改 `contentlayer.config.ts` 中的文档类型以包含新字段。自定义插件可以添加到 `contentlayer.config.ts` 的 `makeSource` 导出的 `remarkPlugins` 和 `rehypePlugins` 属性中。
+
+Markdown 布局不再从 `layouts` 目录自动获取。相反，必须在 `blog/[...slug]/page.tsx` 中定义的 `layouts` 对象中指定它们。[^3]
+
+要移植较大的组件或页面，我建议首先使用 `"use client"` 指令将其指定为客户端组件。一旦它正确渲染，你可以将交互部分（依赖于 `use` hook 的部分）拆分为客户端组件，并将剩余代码保留为服务端组件。有关更多详细信息，请参阅全面的 Next.js [迁移指南](https://nextjs.org/docs/app/building-your-application/upgrading/app-router-migration#migrating-from-pages-to-app)。
+
+## 结语
+
+我希望你喜欢 V2 中的新特性和改进。如果你有任何反馈或建议，请随时开启一个 issue 或在 [Twitter](https://twitter.com/timlrx) 上联系我。
+
+## 支持
+
+正在使用此模板？通过在 GitHub 上点亮星星、分享你自己的博客并在 Twitter 上喊话，或者成为项目[赞助商](https://github.com/sponsors/timlrx)来支持这项工作。
+
+## 许可
+
+[MIT](https://github.com/timlrx/tailwind-nextjs-starter-blog/blob/main/LICENSE) © [Timothy Lin](https://www.timrlx.com)
+
+[^1]: 先前版本在生产构建中注入了 Preact。然而，现在这已不再可能，因为它不支持 React Server Components。虽然整体包大小增加到了约 85kB，但大部分内容可以在服务器端预渲染，从而实现较低的首次有效绘制和可交互时间。全程使用 React 还能带来与外部库和组件更一致的行为。
+
+[^2]: 这不同于 Next.js App 目录布局，最好将它们视为可重用的 React 容器。
+
+[^3]: 这利用了 Server Components 的优势，使得在 markdown 文件中指定所选布局并与 `layouts` 对象匹配变得简单，然后该对象用于渲染适当的布局组件。

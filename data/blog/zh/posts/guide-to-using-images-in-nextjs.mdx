@@ -1,0 +1,78 @@
+---
+title: Next.js 中的图像
+date: "2020-11-11"
+tags:
+  - "guide"
+draft: false
+summary: "本文介绍了如何在 tailwind starter blog 中添加图像，以及 next/image 组件的优势和局限性。"
+authors: ["sparrowhawk"]
+---
+
+# 引言
+
+tailwind starter blog 开箱即用支持 [Next.js 内置的图像组件](https://nextjs.org/docs/api-reference/next/image)，并会自动将 markdown 或 mdx 文档中的默认图像标签替换为提供的 Image 组件。
+
+# 使用方法
+
+要在新的页面路由 / javascript 文件中使用，只需导入图像组件并调用它，例如：
+
+```js
+import Image from "next/image";
+
+function Home() {
+  return (
+    <>
+      <h1>我的首页</h1>
+      <Image
+        src="/me.png"
+        alt="作者照片"
+        width={500}
+        height={500}
+      />
+      <p>欢迎来到我的首页！</p>
+    </>
+  );
+}
+
+export default Home;
+```
+
+对于 markdown 文件，可以使用默认的图像标签，在构建过程中，默认的 `img` 标签会被替换为 `Image` 组件。
+
+假设我们在 `static/images/ocean.jpg` 中有一个名为 `ocean.jpg` 的文件，下面这行代码将生成优化后的图像。
+
+```
+![ocean](/static/images/ocean.jpg)
+```
+
+或者，由于我们使用的是 mdx，我们可以直接使用图像组件！注意，你需要提供固定的宽度和高度。`img` 标签方法会自动解析尺寸。
+
+```js
+<Image alt="ocean" src="/static/images/ocean.jpg" width={256} height={128} />
+```
+
+*注意*：如果你尝试保存图像，如果你的浏览器支持，它将是 webp 格式！
+
+![ocean](/static/images/ocean.jpeg)
+
+照片由 [YUCAR FotoGrafik](https://unsplash.com/@yucar?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
+发布在 [Unsplash](https://unsplash.com/s/photos/sea?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
+
+# 优势
+
+- 使用 Webp 格式减小图像大小（比 jpeg 小约 30%）
+- 响应式图像 - 根据用户的视口提供正确的图像大小
+- 懒加载 - 图像在滚动到视口时才加载
+- 避免[累积布局偏移 (Cumulative Layout Shift)](https://web.dev/cls/)
+- 按需优化而非构建时优化 - 不会增加构建时间！
+
+# 局限性
+
+- 由于依赖 `next/image`，除非你使用外部图像 CDN（如 Cloudinary 或 Imgix），否则实际上需要使用 Vercel 进行托管。这是因为该组件就像一个调用高度优化图像 CDN 的无服务器函数。
+
+  如果你不想绑定到 Vercel，可以删除 `lib/mdx.js` 中 `remarkPlugins` 里的 `imgToJsx`。这将避免替换默认的 `img` 标签。
+
+  或者，也可以等待构建时图像优化的支持。另一个库 [next-optimized-images](https://github.com/cyrilwanner/next-optimized-images) 可以做到这一点，尽管它需要通过 webpack 转换图像，这里没有这样做。
+
+- 外部链接的图像不会通过 `next/image` 处理
+- 所有图像必须存储在 `public` 文件夹中，例如 `/static/images/ocean.jpeg`

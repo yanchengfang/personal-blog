@@ -1,0 +1,19 @@
+{
+  "zh": {
+    "document": 1,
+    "log": 3,
+    "coding": 1,
+    "guide": 3,
+    "feature": 2,
+    "draft": 1,
+    "essay": 1
+  },
+  "en": {
+    "log": 3,
+    "coding": 1,
+    "guide": 3,
+    "feature": 2,
+    "draft": 1,
+    "essay": 1
+  }
+}

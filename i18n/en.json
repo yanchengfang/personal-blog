@@ -1,0 +1,35 @@
+{ 
+  "lang": {
+    "locale": "en"
+  },
+  "desc": {
+    "latest": "Latest",
+    "description": "A blog created with Next.js and Tailwind.css",
+    "project-desc": "Showcase your projects with a hero image (16 x 9)",
+    "back": "Back to the blog",
+    "previous-article": "Previous Article",
+    "next-article": "Next Article",
+    "previous": "Previous",
+    "of": "/",
+    "next": "Next",
+    "learn-more": "Learn more",
+    "read-more": "Read more",
+    "all-posts": "All Posts"
+  },
+  "nav": {
+    "home": "Home",
+    "blog": "Blog",
+    "tags": "Tags",
+    "projects": "Projects",
+    "about": "About"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "system": "System"
+  },
+  "search": {
+    "placeholder": "Type a command or search...",
+    "content": "CONTENT"
+  }
+}

@@ -1,0 +1,39 @@
+---
+title: 示例 .md 文件
+date: "2021-03-08"
+tags:
+  - "coding"
+draft: false
+summary: 带有代码块和语法高亮的Markdown文件示例
+---
+
+这是一个使用Markdown格式的示例帖子。
+
+## 行内高亮
+
+内联高亮示例 `sum = parseInt(num1) + parseInt(num2)`
+
+## 代码块
+
+一些 Javascript 代码
+
+```javascript
+var num1, num2, sum;
+num1 = prompt("Enter first number");
+num2 = prompt("Enter second number");
+sum = parseInt(num1) + parseInt(num2); // "+" means "add"
+alert("Sum = " + sum); // "+" means combine into a string
+```
+
+一些 Python 代码 🐍
+
+```python
+def fib():
+    a, b = 0, 1
+    while True:            # First iteration:
+        yield a            # yield 0 to start with and then
+        a, b = b, a + b    # a will now be 1, and b will also be 1, (0 + 1)
+
+for index, fibonacci_number in zip(range(10), fib()):
+     print('{i:3}: {f:3}'.format(i=index, f=fibonacci_number))
+```
