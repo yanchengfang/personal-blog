@@ -49,7 +49,9 @@ async function generateRSS(config, allBlogs, page = "feed.xml") {
     for (const lang of Object.keys(tagData)) {
       for (const tag of Object.keys(tagData[lang])) {
         const filteredPosts = allBlogs.filter(
-          (post) => post.language === lang && post.tags.map((t) => slug(t)).includes(tag)
+          (post) =>
+            post.language === lang &&
+            post.tags.map((t) => slug(t)).includes(tag),
         );
         const rss = generateRss(config, filteredPosts, `tags/${tag}/${page}`);
         const rssPath = path.join(outputFolder, "tags", tag);

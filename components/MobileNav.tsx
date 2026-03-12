@@ -41,9 +41,7 @@ const MobileNav = () => {
   }, [navShow]);
 
   useEffect(() => {
-    if (navShow) {
-      setNavShow(false);
-    }
+    setNavShow(false);
   }, [pathname]);
 
   return (
