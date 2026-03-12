@@ -1,4 +1,4 @@
-import { setRequestLocale } from 'next-intl/server';
+import { setRequestLocale } from "next-intl/server";
 import projectsData from "@/data/projectsData";
 import Card from "@/components/Card";
 import { genPageMetadata } from "app/seo";
@@ -6,13 +6,13 @@ import { genPageMetadata } from "app/seo";
 export const metadata = genPageMetadata({ title: "Projects" });
 
 export default async function Projects({
-  params
+  params,
 }: {
   params: Promise<{ lang: string }>;
 }) {
   const { lang } = await params;
   setRequestLocale(lang);
-  
+
   return (
     <>
       <div className="divide-y divide-gray-200 dark:divide-gray-700">

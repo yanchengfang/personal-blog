@@ -8,7 +8,7 @@ import SearchButton from "./SearchButton";
 import { useTranslations } from "next-intl";
 
 const Header = () => {
-  const t = useTranslations('nav');
+  const t = useTranslations("nav");
   let headerClass =
     "flex items-center w-full bg-white dark:bg-gray-950 justify-between py-10";
   if (siteMetadata.stickyNav) {
@@ -19,7 +19,7 @@ const Header = () => {
       <Link href="/" aria-label={siteMetadata.headerTitle}>
         <div className="flex items-center justify-between">
           <div className="mr-3">
-            {typeof Logo === 'function' ? (
+            {typeof Logo === "function" ? (
               <Logo />
             ) : (
               <img src={Logo.src} alt="Logo" width={53.87} height={43.61} />

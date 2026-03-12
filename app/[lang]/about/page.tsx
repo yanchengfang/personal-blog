@@ -7,7 +7,11 @@ import { genPageMetadata } from "app/seo";
 
 export const metadata = genPageMetadata({ title: "About" });
 
-export default async function Page({ params }: { params: { lang: string } }) {
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}) {
   const { lang } = await params;
   setRequestLocale(lang);
   const temp = lang === "zh" ? "default" : "stephencurry";

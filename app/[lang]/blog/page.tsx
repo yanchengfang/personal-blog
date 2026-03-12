@@ -1,4 +1,4 @@
-import { setRequestLocale } from 'next-intl/server';
+import { setRequestLocale } from "next-intl/server";
 import { allCoreContent, sortPosts } from "pliny/utils/contentlayer";
 import { allBlogs } from "contentlayer/generated";
 import { genPageMetadata } from "app/seo";
@@ -14,7 +14,9 @@ export default async function BlogPage(props: {
 }) {
   const { lang } = await props.params;
   setRequestLocale(lang);
-  const posts = allCoreContent(sortPosts(allBlogs)).filter(i => i.language === lang);
+  const posts = allCoreContent(sortPosts(allBlogs)).filter(
+    (i) => i.language === lang,
+  );
   const pageNumber = 1;
   const totalPages = Math.ceil(posts.length / POSTS_PER_PAGE);
   const initialDisplayPosts = posts.slice(0, POSTS_PER_PAGE * pageNumber);

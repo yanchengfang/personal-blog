@@ -92,7 +92,8 @@ export default function ListLayoutWithTags({
   const tagKeys = Object.keys(tagCounts);
   const sortedTags = tagKeys.sort((a, b) => tagCounts[b] - tagCounts[a]);
   const l = useTranslations("lang");
-  const tagsList = allTags.find(i => i.language === l("locale"))?.tagsMap || {};
+  const tagsList =
+    allTags.find((i) => i.language === l("locale"))?.tagsMap || {};
   const displayPosts =
     initialDisplayPosts.length > 0 ? initialDisplayPosts : posts;
   const allPost = `${l("locale") === "en" ? "All Posts" : "全部"}`;

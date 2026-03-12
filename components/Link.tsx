@@ -2,12 +2,9 @@
 import { Link } from "@/i18n/routing";
 import type { ComponentProps } from "react";
 
-const CustomLink = ({
-  href,
-  ...rest
-}: ComponentProps<typeof Link>) => {
-  const isInternalLink = href && href.startsWith("/");
-  const isAnchorLink = href && href.startsWith("#");
+const CustomLink = ({ href, ...rest }: ComponentProps<typeof Link>) => {
+  const isInternalLink = typeof href === "string" && href.startsWith("/");
+  const isAnchorLink = typeof href === "string" && href.startsWith("#");
 
   if (isInternalLink) {
     return <Link className="break-words" href={href} {...rest} />;

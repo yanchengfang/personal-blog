@@ -1,4 +1,4 @@
-import { setRequestLocale } from 'next-intl/server';
+import { setRequestLocale } from "next-intl/server";
 import { slug } from "github-slugger";
 import { allCoreContent, sortPosts } from "pliny/utils/contentlayer";
 import siteMetadata from "@/data/siteMetadata";
@@ -11,7 +11,7 @@ import { Metadata } from "next";
 const POSTS_PER_PAGE = 5;
 
 export async function generateMetadata(props: {
-  params: Promise<{ tag: string }>;
+  params: Promise<{ lang: string; tag: string }>;
 }): Promise<Metadata> {
   const params = await props.params;
   const tag = decodeURI(params.tag);
@@ -28,11 +28,14 @@ export async function generateMetadata(props: {
 }
 
 export const generateStaticParams = async () => {
-  const tagCounts = tagData;
-  const tagKeys = Object.keys(tagCounts);
-  return tagKeys.map((tag) => ({
-    tag: encodeURI(tag),
-  }));
+  const tagDataRecord = tagData as Record<string, Record<string, number>>;
+  const allPaths = Object.keys(tagDataRecord).flatMap((lang) => {
+    return Object.keys(tagDataRecord[lang]).map((tag) => ({
+      lang,
+      tag: encodeURI(tag),
+    }));
+  });
+  return allPaths;
 };
 
 export default async function TagPage(props: {
@@ -45,9 +48,11 @@ export default async function TagPage(props: {
   const title = tag[0].toUpperCase() + tag.split(" ").join("-").slice(1);
   const filteredPosts = allCoreContent(
     sortPosts(
-      allBlogs.filter(
-        (post) => post.tags && post.tags.map((t) => slug(t)).includes(tag),
-      ).filter((post) => post.language === lang),
+      allBlogs
+        .filter(
+          (post) => post.tags && post.tags.map((t) => slug(t)).includes(tag),
+        )
+        .filter((post) => post.language === lang),
     ),
   );
   const totalPages = Math.ceil(filteredPosts.length / POSTS_PER_PAGE);

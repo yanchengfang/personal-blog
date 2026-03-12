@@ -2,8 +2,8 @@ import "css/tailwind.css";
 import "pliny/search/algolia.css";
 import "remark-github-blockquote-alert/alert.css";
 
-import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, setRequestLocale } from 'next-intl/server';
+import { NextIntlClientProvider } from "next-intl";
+import { getMessages, setRequestLocale } from "next-intl/server";
 import { Space_Grotesk } from "next/font/google";
 import { Analytics, AnalyticsConfig } from "pliny/analytics";
 import { SearchProvider, SearchConfig } from "pliny/search";
@@ -63,20 +63,20 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({
   children,
-  params
+  params,
 }: {
   children: React.ReactNode;
   params: Promise<{ lang: string }>;
 }) {
   const { lang } = await params;
   const basePath = process.env.BASE_PATH || "";
-  
-   // 启用静态渲染
+
+  // 启用静态渲染
   setRequestLocale(lang);
 
   // 获取当前语言的翻译消息
   const messages = await getMessages();
-  
+
   return (
     <html
       lang={lang}
@@ -133,7 +133,9 @@ export default async function RootLayout({
               analyticsConfig={siteMetadata.analytics as AnalyticsConfig}
             />
             <SectionContainer>
-              <SearchProvider searchConfig={siteMetadata.search as SearchConfig}>
+              <SearchProvider
+                searchConfig={siteMetadata.search as SearchConfig}
+              >
                 <Header />
                 <LanguageSwitcher />
                 <main className="mb-auto">{children}</main>

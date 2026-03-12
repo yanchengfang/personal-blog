@@ -58,7 +58,7 @@ const Blank = () => <svg className="h-6 w-6" />;
 const ThemeSwitch = () => {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const t = useTranslations('theme');
+  const t = useTranslations("theme");
   // When mounted on client, now we can show the UI
   useEffect(() => setMounted(true), []);
 
@@ -99,7 +99,7 @@ const ThemeSwitch = () => {
                         <div className="mr-2">
                           <Sun />
                         </div>
-                        {t('light')}
+                        {t("light")}
                       </button>
                     )}
                   </MenuItem>
@@ -115,7 +115,7 @@ const ThemeSwitch = () => {
                         <div className="mr-2">
                           <Moon />
                         </div>
-                        {t('dark')}
+                        {t("dark")}
                       </button>
                     )}
                   </MenuItem>
@@ -131,7 +131,7 @@ const ThemeSwitch = () => {
                         <div className="mr-2">
                           <Monitor />
                         </div>
-                        {t('system')}
+                        {t("system")}
                       </button>
                     )}
                   </MenuItem>

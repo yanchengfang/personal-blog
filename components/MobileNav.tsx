@@ -21,7 +21,7 @@ const MobileNav = () => {
   const [navShow, setNavShow] = useState(false);
   const navRef = useRef(null);
   const pathname = usePathname();
-  const t = useTranslations('nav');
+  const t = useTranslations("nav");
 
   const onToggleNav = () => {
     setNavShow((status) => !status);

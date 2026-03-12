@@ -1,19 +1,17 @@
 {
-  "zh": {
-    "document": 1,
-    "log": 3,
+  "en": {
     "coding": 1,
     "guide": 3,
-    "feature": 2,
-    "draft": 1,
+    "log": 3,
+    "feature": 1,
     "essay": 1
   },
-  "en": {
-    "log": 3,
+  "zh": {
     "coding": 1,
     "guide": 3,
-    "feature": 2,
-    "draft": 1,
+    "log": 3,
+    "feature": 1,
+    "document": 1,
     "essay": 1
   }
 }

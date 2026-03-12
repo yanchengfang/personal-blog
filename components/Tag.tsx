@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { slug } from "github-slugger";
 import { allTags } from "contentlayer/generated";
-import { useTranslations } from 'next-intl';
+import { useTranslations } from "next-intl";
 
 interface Props {
   text: string;
@@ -9,7 +9,8 @@ interface Props {
 
 const Tag = ({ text }: Props) => {
   const l = useTranslations("lang");
-  const tagsList = allTags.find(i => i.language === l("locale"))?.tagsMap || {};
+  const tagsList =
+    allTags.find((i) => i.language === l("locale"))?.tagsMap || {};
 
   return (
     <Link
