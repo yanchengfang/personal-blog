@@ -1,0 +1,24 @@
+name: Test SSH Connection to VPS
+
+# 触发条件：设置为可以手动触发，方便随时测试
+on:
+  workflow_dispatch:
+
+jobs:
+  test-ssh:
+    runs-on: ubuntu-latest  # 在 GitHub 的标准 Ubuntu 运行器上执行
+    steps:
+      # 第一步：使用 appleboy/ssh-action 这个流行的 action 来执行 SSH 命令
+      - name: Execute SSH command on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          # 从 GitHub Secrets 中读取连接信息
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}  # 如果没有设置端口 Secret，则默认使用 22
+          # 要在 VPS 上执行的测试脚本
+          script: |
+            echo "成功通过 GitHub Actions 连接到 VPS！"
+            echo "当前服务器时间：$(date)"
+            echo "当前登录用户：$(whoami)"

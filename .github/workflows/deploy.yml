@@ -52,7 +52,7 @@ jobs:
 
             NODE_MAJOR=0
             if command -v node > /dev/null 2>&1; then
-              NODE_MAJOR="$(node -p "parseInt(process.versions.node.split('.')[0], 10)")"
+              NODE_MAJOR="$(node -p 'parseInt(process.versions.node.split(".")[0], 10)')"
             fi
 
             if [ "$NODE_MAJOR" -lt 20 ]; then
@@ -63,7 +63,7 @@ jobs:
               fi
               export PATH="/usr/local/bin:$PATH"
               if command -v node > /dev/null 2>&1; then
-                NODE_MAJOR="$(node -p "parseInt(process.versions.node.split('.')[0], 10)")"
+                NODE_MAJOR="$(node -p 'parseInt(process.versions.node.split(".")[0], 10)')"
                 echo "Node(after): $(node -v) ($(node -p 'process.execPath'))"
               fi
             fi
