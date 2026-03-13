@@ -36,9 +36,39 @@ jobs:
             PROJECT_DIR="/var/www/personal-blog"
             REPO_URL="git@github.com:yanchengfang/personal-blog.git"  # 请替换为你的仓库 SSH 地址
 
-            echo "Node: $(node -v)"
-            echo "NPM: $(npm -v)"
-            if [ "$(node -p "parseInt(process.versions.node.split('.')[0], 10)")" -lt 20 ]; then
+            echo "PATH: $PATH"
+            command -v node || true
+            command -v npm || true
+            if command -v node > /dev/null 2>&1; then
+              echo "Node: $(node -v) ($(node -p 'process.execPath'))"
+            else
+              echo "Node: not found"
+            fi
+            if command -v npm > /dev/null 2>&1; then
+              echo "NPM: $(npm -v) ($(npm config get prefix))"
+            else
+              echo "NPM: not found"
+            fi
+
+            NODE_MAJOR=0
+            if command -v node > /dev/null 2>&1; then
+              NODE_MAJOR="$(node -p "parseInt(process.versions.node.split('.')[0], 10)")"
+            fi
+
+            if [ "$NODE_MAJOR" -lt 20 ]; then
+              export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+              if [ -s "$NVM_DIR/nvm.sh" ]; then
+                . "$NVM_DIR/nvm.sh"
+                nvm use 22 || (nvm install 22 && nvm use 22)
+              fi
+              export PATH="/usr/local/bin:$PATH"
+              if command -v node > /dev/null 2>&1; then
+                NODE_MAJOR="$(node -p "parseInt(process.versions.node.split('.')[0], 10)")"
+                echo "Node(after): $(node -v) ($(node -p 'process.execPath'))"
+              fi
+            fi
+
+            if [ "$NODE_MAJOR" -lt 20 ]; then
               echo "Node.js 版本过低(需要 >= 20),请先在服务器升级 Node 后再部署。"
               exit 1
             fi
