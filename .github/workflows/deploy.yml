@@ -28,12 +28,20 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 60m
           script: |
             set -e  # 遇到错误立即退出
 
             # 定义项目路径（请替换为你的实际路径）
             PROJECT_DIR="/var/www/personal-blog"
             REPO_URL="git@github.com:yanchengfang/personal-blog.git"  # 请替换为你的仓库 SSH 地址
+
+            echo "Node: $(node -v)"
+            echo "NPM: $(npm -v)"
+            if [ "$(node -p "parseInt(process.versions.node.split('.')[0], 10)")" -lt 20 ]; then
+              echo "Node.js 版本过低(需要 >= 20),请先在服务器升级 Node 后再部署。"
+              exit 1
+            fi
 
             # 如果目录不存在，则克隆仓库
             if [ ! -d "$PROJECT_DIR" ]; then
