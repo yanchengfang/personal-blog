@@ -24,6 +24,11 @@ jobs:
         run: |
           docker save personal-blog:ci -o personal-blog-image.tar
 
+      - name: Pull and save nginx image (avoid VPS pull)
+        run: |
+          docker pull nginx:1.27-alpine
+          docker save nginx:1.27-alpine -o nginx-image.tar
+
       - name: Debug files before upload
         run: |
           ls -lah
@@ -31,10 +36,11 @@ jobs:
           test -f docker-compose.yml
           test -f nginx/default.conf
           test -f personal-blog-image.tar
+          test -f nginx-image.tar
 
       - name: Package deploy bundle
         run: |
-          tar -czf deploy-bundle.tgz docker-compose.yml nginx/default.conf personal-blog-image.tar
+          tar -czf deploy-bundle.tgz docker-compose.yml nginx/default.conf personal-blog-image.tar nginx-image.tar
 
       - name: Upload to ESC (scp)
         uses: appleboy/scp-action@v0.1.7
@@ -77,6 +83,9 @@ jobs:
 
             # load latest image
             sudo docker load -i "$TMP_DIR/personal-blog-image.tar"
+
+            # load nginx image to avoid network pull from docker hub
+            sudo docker load -i "$TMP_DIR/nginx-image.tar"
 
             # docker compose 可能需要 sudo；同时尝试兼容 docker-compose v1
             if sudo docker compose -f "$APP_DIR/docker-compose.yml" version >/dev/null 2>&1; then
