@@ -1,0 +1,90 @@
+name: Personal Blog Deploy (Docker Compose)
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static export
+        env:
+          EXPORT: "1"
+          UNOPTIMIZED: "1"
+          # 如果你部署在子路径（例如 https://example.com/myblog/）
+          # 建议在仓库 Settings -> Secrets 新增 BASE_PATH=/myblog
+          BASE_PATH: ${{ secrets.BASE_PATH }}
+        run: |
+          export BASE_PATH="${BASE_PATH}"
+          npm run build
+
+      - name: Package out/
+        run: |
+          test -d out
+          tar -czf out.tgz out
+
+      - name: Upload to ESC (scp)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: |
+            out.tgz
+            docker-compose.yml
+            nginx/default.conf
+          target: /tmp/personal-blog-deploy
+
+      - name: Deploy on ESC (ssh)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 60m
+          script: |
+            set -e
+
+            APP_DIR="/opt/personal-blog"
+            TMP_DIR="/tmp/personal-blog-deploy"
+
+            sudo mkdir -p "$APP_DIR"
+            sudo mkdir -p "$APP_DIR/nginx"
+            sudo mkdir -p "$APP_DIR/out"
+
+            # 覆盖 nginx 配置
+            sudo cp -f "$TMP_DIR/docker-compose.yml" "$APP_DIR/docker-compose.yml"
+            if [ -f "$TMP_DIR/nginx/default.conf" ]; then
+              sudo cp -f "$TMP_DIR/nginx/default.conf" "$APP_DIR/nginx/default.conf"
+            else
+              # 兼容 scp-action 可能会把文件直接展开到 target 根目录
+              sudo cp -f "$TMP_DIR/default.conf" "$APP_DIR/nginx/default.conf"
+            fi
+
+            # 覆盖静态站点
+            sudo rm -rf "$APP_DIR/out"
+            sudo mkdir -p "$APP_DIR"
+            sudo tar -xzf "$TMP_DIR/out.tgz" -C "$APP_DIR"
+
+            # docker compose 可能需要 sudo；同时尝试兼容 docker-compose v1
+            if sudo docker compose -f "$APP_DIR/docker-compose.yml" version >/dev/null 2>&1; then
+              sudo docker compose -f "$APP_DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
+            else
+              sudo docker-compose -f "$APP_DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
+            fi
+
