@@ -89,8 +89,12 @@ jobs:
 
             # docker compose 可能需要 sudo；同时尝试兼容 docker-compose v1
             if sudo docker compose -f "$APP_DIR/docker-compose.yml" version >/dev/null 2>&1; then
+              # Stop and remove previous containers first (free port binding)
+              sudo docker compose -f "$APP_DIR/docker-compose.yml" down --remove-orphans || true
               sudo docker compose -f "$APP_DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
             else
+              # Stop and remove previous containers first (free port binding)
+              sudo docker-compose -f "$APP_DIR/docker-compose.yml" down --remove-orphans || true
               sudo docker-compose -f "$APP_DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
             fi
 
