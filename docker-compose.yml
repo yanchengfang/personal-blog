@@ -1,11 +1,19 @@
 services:
-  personal-blog:
+  app:
+    image: personal-blog:ci
+    container_name: personal-blog-app
+    restart: unless-stopped
+    expose:
+      - "3000"
+
+  nginx:
     image: nginx:1.27-alpine
-    container_name: personal-blog
+    container_name: personal-blog-nginx
     restart: unless-stopped
     ports:
       - "${BLOG_HOST_PORT:-80}:80"
     volumes:
-      - /opt/personal-blog/out:/usr/share/nginx/html:ro
-      - /opt/personal-blog/nginx:/etc/nginx/conf.d:ro
+      - ./nginx:/etc/nginx/conf.d:ro
+    depends_on:
+      - app
 
