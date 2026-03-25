@@ -4,6 +4,10 @@ on:
   push:
     branches: [ master ]
 
+concurrency:
+  group: deploy-master
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -97,4 +101,24 @@ jobs:
               sudo docker-compose -f "$APP_DIR/docker-compose.yml" down --remove-orphans || true
               sudo docker-compose -f "$APP_DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
             fi
+
+      - name: Health check on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            for i in 1 2 3 4 5; do
+              if curl -fsS "http://127.0.0.1/zh/" >/dev/null; then
+                echo "Health check passed."
+                exit 0
+              fi
+              echo "Health check failed, retry $i/5..."
+              sleep 5
+            done
+            echo "Health check failed after retries."
+            exit 1
 
