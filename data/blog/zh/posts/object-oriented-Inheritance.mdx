@@ -1,0 +1,134 @@
+---
+title: "面向对象——继承"
+date: "2026-03-24"
+lastmod: "2026-03-24"
+tags:
+  - "javascript"
+summary: >-
+  梳理 JavaScript 继承：原型链、构造函数、组合与寄生组合继承，对比优缺点并解释 extends 与 super 的关系。
+---
+
+## 名词解释
+
+> - `prototype`: 函数独有，叫 `原型` 或 `原型对象`，用于给实例共享方法。
+> - `__proto__ / [[Prototype]]`：对象自身的 `隐式原型` 指针，也有叫`内部槽`，通常指向自身构造函数的原型（可以修改指向某个对象 或 `null`）， 是实现继承的重要途径，多个构成原型链，至于单个，一直以来没有统一叫法。
+
+## 1. 原型链继承
+
+**特点：子类的原型指向了父类的实例**
+
+!["prototype-chain-inheritance.png"](https://github.com/yanchengfang/note-assets/raw/master/javascript/prototype-chain-inheritance.png "原型链继承")
+
+> - 继承了父类原型上的公有属性
+> - 创建子类实例时，无法给父类构造函数按实例传参
+> - 子类原型上会挂着一份父类实例属性；若含引用类型，实例间会共享并相互影响
+
+```js
+// 代码示例
+function Parent(name, age) {
+  this.name = name;
+  this.age = age;
+  this.arr = [1, 2, 3];
+}
+Parent.prototype.say = function () {
+  console.log(`${this.name} 的年龄是 ${this.age}`);
+};
+
+function Child() {}
+
+Child.prototype = new Parent("niko", 18);
+
+let c1 = new Child("zoyi", 1000);
+let c2 = new Child();
+
+c2.arr.push(4);
+c2.gender = "girl";
+
+console.log(c1.arr); // [ 1, 2, 3, 4 ] 共享引用类型的改变会影响全局
+console.log(c1.gender); // undefined 对于自身不存在的基本类型值，创建新属性并赋值，不修改原型链上的属性（除非原型上有 setter）
+console.log(c2.gender); // girl
+c1.say(); // niko 的年龄是 18
+console.log(c1.constructor); // [Function: Parent]
+```
+
+> - 由于 `Child.prototype` 是一个 `Parent` 实例，`c1` 调用 `say` 时，先在自身找 `name/age`，找不到再沿原型链到 `Child.prototype` 上读取到它们。
+> - `Child.prototype = new Parent()` 后，子类原型对象被替换，默认 `constructor` 不再指向 `Child`，沿链查找通常会得到 `Parent`。
+
+## 2. 构造函数继承
+
+**特点：在子类构造函数中，将父类当普通函数执行，通过 call 改变 this 指向子类实例**
+
+> 仅继承了父类的实例属性，没有继承父类原型上的公有属性（原型链没有发生变化）
+
+```js
+// 代码示例
+function Parent(name, age) {
+  this.name = name;
+  this.age = age;
+}
+Parent.prototype.say = function () {
+  console.log(`${this.name} 的年龄是 ${this.age}`);
+};
+
+function Child(name, age, gender) {
+  Parent.call(this, name, age);
+  this.gender = gender;
+}
+let c1 = new Child("zoyi", 1000, "girl");
+
+console.log(c1); // { name: 'zoyi', age: 1000, gender: 'girl' }
+c1.say(); // c1.say is not a function
+```
+
+## 3. 组合继承
+
+**特点：原型链继承 和 构造函数继承 的结合**
+
+> - 优点：同时继承父类实例属性与公有属性
+> - 缺点：
+>
+> > 1. 父类构造函数被重复执行（一次给子类原型，一次给子类实例），效率和语义都不够理想。
+> > 2. 子类构造函数执行时，会再次在实例上创建同名父类实例属性，导致原型上那份属性长期被遮蔽并造成额外开销。
+
+## 4. 寄生组合继承
+
+!["parasitic-composition-inheritance"](https://github.com/yanchengfang/note-assets/raw/master/javascript/parasitic-composition-inheritance.png "寄生组合继承")
+
+> - 同时继承父类实例属性与公有属性
+> - 只调用了一次父类构造函数
+> - 使用 `Object.create()` 作为桥梁，连接 `Child.prototype` 与 `Parent.prototype`。
+> - 注意点: 若在重设原型前已给 `Child.prototype` 添加成员，会被覆盖；通常需要手动修复 `constructor` 指向。
+
+```js
+function Parent(name, age) {
+  this.name = name;
+  this.age = age;
+}
+Parent.prototype.say = function () {
+  console.log(`${this.name} 的年龄是 ${this.age}`);
+};
+
+function Child(name, age) {
+  Parent.call(this, name, age);
+}
+// Child.prototype ——> newObj ——> Parent.prototype
+Child.prototype = Object.create(Parent.prototype);
+
+//修复子类原型对象（prototype）被覆盖的 constructor 指向
+Child.prototype.constructor = Child;
+
+let c1 = new Child("zoyi", 1000);
+c1.say(); // zoyi 的年龄是 1000
+console.log(c1.constructor); // [Function: Child]
+```
+
+### ES6 类继承的关键字 `extends`
+
+语义上可理解为“寄生组合继承”的标准化写法，关键点如下：
+
+1. 构造函数中通过 `super()` 调用父类构造逻辑，完成当前实例初始化后才能使用 `this`。
+   > 它的行为可类比 `Parent.call(this, ...)`，但并不等同于简单函数调用。
+   > super 在实例方法里指向 `Parent.prototype`，在静态方法里指向 Parent 本身
+2. 建立 `Child.prototype` 与 `Parent.prototype` 之间的原型链。
+3. 建立 `Child` 与 `Parent` 的静态继承链（`Child.__proto__ === Parent`），使子类可直接访问父类静态成员。
+   > 这通常可理解为 `Object.setPrototypeOf(Child, Parent)` 的效果；通过 `instance.constructor` 间接访问静态方法只是访问路径，不是实例继承。

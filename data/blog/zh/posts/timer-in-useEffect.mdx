@@ -1,0 +1,179 @@
+---
+title: "useEffect 中执行定时器引发的闭包问题"
+date: "2026-03-19"
+lastmod: "2026-03-19"
+tags:
+  - "react"
+summary: >-
+  解析 useEffect 中定时器的闭包陷阱：重复创建、状态滞后与泄漏风险，并给出清理、防抖、函数式更新和 useRef 修复方案。
+---
+
+## 关于定时器
+
+> - 定时器被清理后，未完成的定时任务就不会触发
+> - 定时器执行完任务后，会自动销毁
+> - 定时器制造内存泄漏的原因是：组件卸载后，存在未触发定时任务还没执行（回调任务还存在浏览器的任务队列里面），因为闭包的存在，定时器引用的外界变量不会销毁。
+
+## 问题一
+
+**想实现的效果**：两秒后输出点击按钮的次数
+
+```js
+// 问题代码
+export default function Test() {
+  const [n, setN] = useState(0);
+
+  useEffect(() => {
+    setTimeout(() => {
+      console.log(n);
+    }, 2000);
+  });
+
+  return (
+    <div>
+      <h1>{n}</h1>
+      <button
+        onClick={() => {
+          setN((prevN) => prevN + 1);
+        }}
+      >
+        Click
+      </button>
+    </div>
+  );
+}
+```
+
+![errorLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/errorLog.png "Problem No.1 snapshot log")
+
+**结果**：打开页面连续点击 2 次按钮，两秒后（点击的时间忽略），控制台连续输出 `0 1 2`。
+
+**错误原因**：
+
+1.  初始化第 1 次执行 useEffect，开启定时任务 timer1 （两秒后输出 n）
+2.  第 1 次点击，触发 setN，n 被改变页面重新渲染，重新执行函数组件 Test，第 2 次触发 useEffect。开启定时任务 timer2 （两秒后输出 n）。
+3.  第 2 次点击，第 3 次触发 useEffect。开启定时任务 timer3 （两秒后输出 n）。停止点击。
+4.  useEffect 的执行时机是在页面绘制后（此时 n 值早已是最新的值），每次函数组件执行可以看作一次闭包，定时器里引用当前上下文中的 n 值。
+5.  三个定时器大约两秒后依次触发，输出对应闭包下的 n 值；
+
+**解决办法**：
+在两秒内连续点击，及时清理上次的定时器，类似于 **防抖**。
+
+```js
+useEffect(() => {
+  const timer = setTimeout(() => {
+    console.log(n);
+  }, 2000);
+  return () => clearTimeout(timer);
+});
+```
+
+![rightLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/rightLog.png "Problem No.1 snapshot log")
+
+## 问题二
+
+**想实现的效果**：倒计时抢券功能，5 秒后，提示 "活动结束"。
+
+```js
+// 问题代码
+export default function Test() {
+  const [n, setN] = useState(5);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setN(n - 1);
+      console.log(n);
+      if (n === 0) {
+        clearInterval(timer);
+      }
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  });
+
+  return (
+    <div>
+      <h1>{n || "活动结束"}</h1>
+    </div>
+  );
+}
+```
+
+![errorLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/errorLog2.png "Problem No.2 snapshot log")
+
+**结果**：倒计时结束定时器并没有停下来，并且打印的值始终比实际值延后。
+
+**错误原因**：
+
+1.  定时器不会停止：destroy 清理的上次的定时器，即便 n = 0 清理的是当前定时器，`setN` 触发更新还是会创建新的定时器，并打印对应闭包中的 n 值。
+    > 可以做判断 `n !== 0 && setN(n - 1) : clearInterval(timer)` 实现效果，但还是需要开多个定时器，不是好的解决办法
+2.  值延后打印：1s 后执行定时器回调，打印的 n 还是引用先前闭包的值，此时还触发了 `setN`，页面重新渲染 `n = n - 1`，造成页面刷新和控制台打印看起来在同一时间，但数值不一样。
+
+**解决办法**：
+让定时器具有唯一性；使用 dispath 的回调函数方式获取最新值 `setN(prevN => prevN + 1)`
+
+```js
+useEffect(() => {
+  const timer = setInterval(() => {
+    setN((prevN) => {
+      const next = prevN - 1;
+      console.log({ n1: n, n2: next });
+      !next && clearInterval(timer);
+      return next;
+    });
+  }, 1000);
+  return () => {
+    clearInterval(timer);
+  };
+}, []);
+```
+
+![rightLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/rightLog2.png "Problem No.2 snapshot log")
+
+因为这个唯一定时器是初始化创建的，n1 一直引用的是第一次闭包里的 n 值，因此一直输出 5。
+
+### 那 n2 为什么就能获取最新的值呢？
+
+> 当调用 `setN(prevN => ...)` 时，React 不会立即执行这个函数，而是将它加入到一个**更新队列**中。在后续的渲染阶段，React 会按顺序处理队列中的每个更新函数，并传入当前已经应用了前面所有更新后的状态值作为参数。在定时器这类异步场景中，回调函数定义时的 n 可能早已过时。但函数式更新让回调不再依赖外部闭包变量，而是依赖 React 内部管理的实时状态，因此总能拿到最新值。
+
+## \*使用 useRef 来 "绕过" 闭包
+
+### 原理:
+
+> 每次渲染时，函数组件内的局部变量（如 state）都会被重新创建，并被当前渲染闭包捕获。
+> 而 ref 对象在组件的整个生命周期内保持不变，**在多次渲染间共享**，它的 `.current` 属性可以随时修改且不会触发重新渲染。
+> 因此，我们可以在每次渲染时，将最新的 state 同步到 ref.current 中，然后在定时器回调里通过 ref.current 获取最新值，而不再依赖闭包中捕获的旧值。
+
+```js
+import { useState, useEffect, useRef } from "react";
+
+export default function Test() {
+  const [n, setN] = useState(5);
+  const nRef = useRef(n); // 创建一个 ref，初始值为 n
+
+  // 每次渲染后，将最新的 n 同步到 ref 中
+  useEffect(() => {
+    nRef.current = n;
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // 通过 ref.current 获取最新的 n
+      const currentN = nRef.current;
+      console.log("当前 n:", currentN);
+      if (currentN > 0) {
+        setN(currentN - 1);
+      } else {
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []); // 空依赖数组，确保定时器只创建一次
+
+  return <h1>{n || "活动结束"}</h1>;
+}
+```
+
+**备注**: 这是一种通用技巧，不仅适用于定时器，也适用于任何需要绕过闭包陷阱的异步操作（如事件监听、`requestAnimationFrame` 等）。

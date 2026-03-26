@@ -10,5 +10,9 @@
   "lyrics": "LYRICS",
   "sport": "SPORT",
   "log": "LOG",
-  "draft": "DRAFT"
+  "draft": "DRAFT",
+  "javascript": "JAVASCRIPT",
+  "es6": "ES6",
+  "react": "REACT",
+  "enginnering": "ENGINEERING"
 }

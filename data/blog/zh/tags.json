@@ -10,5 +10,9 @@
   "lyrics": "歌词",
   "sport": "运动",
   "log": "开发者日志",
-  "draft": "草稿"
+  "draft": "草稿",
+  "javascript": "JavaScript",
+  "es6": "ES6",
+  "react": "React",
+  "enginnering": "工程化"
 }

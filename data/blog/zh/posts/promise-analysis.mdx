@@ -1,0 +1,327 @@
+---
+title: "Promise/A+ 解析"
+date: "2026-03-26"
+lastmod: "2026-03-26"
+tags:
+  - "es6"
+  - "javascript"
+summary: >-
+  解析 Promise/A+ 核心：状态与执行时机、then 链式决议与 thenable 展平、异常传播，以及 resolve/reject/catch/finally/all/race。
+---
+
+# Promise/A+ 解析
+
+## 关于 Promise 所要掌握的点
+
+### Promise 中有三种状态
+
+- 分别是 `pending` `fulfilled` `rejected`。
+- 状态一旦从 `pending` 变为 `fulfilled/rejected` ，就会“凝固”，不能再改变。
+- `executor()` `resolve()` `reject()` 默认都是同步执行的。
+
+```js
+const executor = (resolve, reject) => {
+  resolve("fulfilled"); // 将状态变为 '成功'
+  reject("rejected"); // 不会再执行了
+};
+new Promise(executor);
+```
+
+### executor 中执行 reject() 和 throw new Error()
+
+- 在 `executor` 的同步阶段，`throw new Error()` 会抛出一个异常，Promise 内部会用 `try...catch` 捕获这个异常，然后自动调用 `reject(error)`。
+- 所以在同步代码里，`reject(reason)` 和 `throw new Error()` 都会让 Promise 进入 `rejected`。
+- 被 `catch` 或 `then(_, onRejected)` 捕获后，如果返回普通值，后续链会转为 `fulfilled`。
+
+```js
+Promise.reject("初始错误")
+  .catch((err) => {
+    console.log("捕获到错误:", err);
+    return "恢复后的值"; // 返回普通值，后续链会进入 fulfilled 状态
+  })
+  .then((value) => {
+    console.log("后续 then 收到:", value); // 输出: 后续 then 收到: 恢复后的值
+    return "继续传递";
+  })
+  .catch((err) => {
+    console.log("这个 catch 不会执行，因为错误已被处理");
+  });
+```
+
+- 但在**异步回调**里直接 `throw new Error()`，不属于 Promise 构造时的同步执行上下文，通常不会被这个 Promise 的 `.catch` 捕获。
+
+```js
+// 异步 throw 无法被捕获
+new Promise((resolve, reject) => {
+  setTimeout(() => {
+    throw new Error("异步错误"); // 全局未捕获异常
+  }, 0);
+}).catch((e) => console.log(e)); // 不会执行
+
+// 正确写法是把异步错误显式交给 reject：
+new Promise((resolve, reject) => {
+  setTimeout(() => {
+    try {
+      // ...可能报错的逻辑
+      throw new Error("异步错误");
+    } catch (e) {
+      reject(e);
+    }
+  }, 0);
+}).catch((e) => console.log("捕获到:", e.message));
+```
+
+### then(onFulfilled, onRejected) 回调的执行时机
+
+- `p.then(...)` 执行也是同步的。
+- Promise 实例 p 的状态决定是否执行或者执行哪个 `reaction（onFulfilled / onRejected）`
+  1. p 的状态确定后，进入 then 方法，根据状态将对应 `reaction` 回调。通过 `queueMicrotask` 加入到微任务队列，结束 then，返回一个新的 Promise 实例。
+     > `queueMicrotask` 是一个全局函数，用于将一个回调函数添加到微任务队列（microtask queue）中。是 HTML 标准和 Node.js 都支持的 API，在 ECMAScript 2020 中被正式纳入规范。
+  2. p 的状态还未定：比如在 `executor` 中用定时器包裹了`resolve() / reject()`，因为 then 是同步的，此时进入then，p 的状态是 `pending` 还未凝固。Promise 将 `reaction` 经**asyncRun**处理，暂存到 Promise 类的全局的回调数组。待真正触发`resolve() / reject()` 后，将队列的方法依次取出，并执行 `asyncRun` 将 `reaction` 放入微任务队列。**此时回调还未执行，只是放到了微任务队列里面，等待同步任务执行完毕，才会依次执行**。
+     > `asyncRun` 的作用就是将回调函数交给 `queueMicrotask` 处理的“包装器”。
+     > 因此 `reaction` 回调的执行是**异步**的。
+
+```js
+// 加入微任务队列
+function asyncRun(fn) {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(fn);
+    return;
+  }
+  setTimeout(fn, 0);
+}
+// In Promise.then()
+/**
+ * 执行 fulfilled 分支
+ * - 用微任务/异步任务包装，保证 then 回调异步执行
+ * - 回调结果 x 交给 resolvePromise 统一处理
+ */
+const runFulfilled = () => {
+  asyncRun(() => {
+    try {
+      const x = realOnFulfilled(this.value); // x: 第一个 then 中的 onFulfilled 返回值，它决定 promise2 的状态
+      resolvePromise(promise2, x, resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+// 判断是哪种情况
+if (this.state === FULFILLED) {
+  runFulfilled();
+} else if (this.state === REJECTED) {
+  runRejected();
+} else {
+  // pending：先存回调，等 resolve/reject 时再统一触发
+  this.onFulfilledCallbacks.push(runFulfilled);
+  this.onRejectedCallbacks.push(runRejected);
+}
+```
+
+### Promise.then() 的链式调用，都做了些什么
+
+示例：
+
+```js
+const p2 = p1.then(fn1, fn2);
+const p3 = p2.then(fn3, fn4);
+```
+
+**问题：由上面可知，这种链式关系，在执行同步代码就已经形成。但是在链式中 fn 的执行受什么影响？**
+
+- 一个 Promise 实例的状态由 `resolve() / reject()` 来决定。
+- 实例 p1 的状态，决定执行 fn1 / fn2, 并且返回一个新的实例 p2;
+- 同理 p2 的状态，影响着后续 fn3 / fn4 的执行。**因此 then 中核心则是如何决定 p2 状态**。
+- 新返回 promise2 实例的状态受回调函数 fn 返回值影响。（通过控制其 `resolve() / reject()` 来实现）
+
+  > - 如果 fn 的返回值 x 不是 `thenable 类型`（实现了 then 接口，可以被 then 调用），那么 p2 fulfilled（x）给 fn3。
+  > - 如果 x 是对象或者函数，那么 x 就有可能是 `thenable 类型`。
+  > - `thenable 类型`的 x 的状态是自己实现的，由自己控制，且 p2 的状态就会和 x 的状态进行挂钩。
+  > - 如果外层 Promise 直接 resolve(内层Promise)。规范要求**外层应“跟随”内层最终结果**，而不是把“Promise 对象本身”当普通值传下去，通过递归调用 `resolvePromise`，可以持续“剥开”嵌套的 `thenable`，直到获得一个普通值，或者遇到拒绝状态时立即终止。这就是“展平（flatten）”语义。
+
+  ```js
+  // 示例
+  const p = new Promise((resolve, reject) => {
+    const value = Promise.reject("rejected");
+    resolve(value);
+  });
+  p.then(
+    (val) => {
+      console.log("成功", val); // 不执行
+    },
+    (reason) => {
+      console.log("失败", reason); // `失败 rejected` 可以看出，p 的状态被后面 value 的状态的接管
+    },
+  );
+  ```
+
+- 双重保险
+  > - 在 `resolve` 中优先处理“同构 Promise”（如 `value instanceof Promise`）是优化。
+  > - 在 `resolvePromise` 中通过 `then.call` 处理通用 `thenable` 是规范核心。
+  > - 两者结合，既有性能优化，也保证兼容外部实现/用户自定义 `thenable`。
+
+```js
+// resolve 实现
+const resolve = (value) => {
+  // 同化 Promise 实例：当前 promise 跟随 value 的最终结果
+  if (value instanceof Promise) {
+    value.then(resolve, reject);
+    return;
+  }
+  // ...
+};
+
+// resolvePromise 实现
+function resolvePromise(promise2, x, resolve, reject) {
+  // 1. 防止 p.then(() => p2) 这类自解析死循环
+  if (promise2 === x) {
+    reject(new TypeError("Chaining cycle detected for promise"));
+    return;
+  }
+
+  // 2. 只有对象/函数才可能是 thenable
+  if (x !== null && (typeof x === "object" || typeof x === "function")) {
+    // 防止 thenable 同时/重复调用 resolve 和 reject
+    let called = false;
+
+    try {
+      // 取 then 时也可能抛错（例如 getter 抛异常）
+      const then = x.then;
+
+      if (typeof then === "function") {
+        // 按 thenable 协议调用：then.call(x, resolveFn, rejectFn)
+        then.call(
+          x,
+          (y) => {
+            if (called) return;
+            called = true;
+            // 递归解析 y，直到拿到普通值或最终拒绝
+            resolvePromise(promise2, y, resolve, reject);
+          },
+          (r) => {
+            if (called) return;
+            called = true;
+            reject(r);
+          },
+        );
+        return; // thenable 分支处理完毕
+      }
+    } catch (error) {
+      // 取 then 或调用 then 过程抛错，且未决过，转 reject
+      if (called) return;
+      called = true;
+      reject(error);
+      return;
+    }
+  }
+
+  // 3. 普通值：直接 fulfilled
+  resolve(x);
+}
+```
+
+---
+
+## Promise 的其他 API
+
+### resolve
+
+- 如果本来就是 Promise，直接返回
+- 否则包装成 `fulfilled` 的 Promise
+
+```js
+static resolve(value) {
+  if (value instanceof Promise) return value;
+  return new Promise((resolve) => resolve(value));
+}
+```
+
+### reject
+
+- Promise 上的静态方法
+- 直接返回 `rejected` 的 Promise
+
+```js
+static reject(reason) {
+  return new Promise((_, reject) => reject(reason));
+}
+```
+
+### catch
+
+- 语法糖，等价于 `then(null, onRejected)`
+
+```js
+catch(onRejected) {
+  return this.then(null, onRejected);
+}
+```
+
+### finally
+
+- 不改变前一个 Promise 的值/错（除非 finally 自己抛错/返回 rejected）
+- 无论成功失败都会执行 `onFinally`
+
+```js
+finally(onFinally) {
+  const handler =
+    typeof onFinally === "function" ? onFinally : () => undefined;
+  return this.then(
+    // 成功：先执行 finally，再把原 value 传下去
+    (value) => Promise.resolve(handler()).then(() => value),
+    // 失败：先执行 finally，再把原 reason 继续抛出
+    (reason) =>
+      Promise.resolve(handler()).then(() => {
+        throw reason;
+      }),
+  );
+}
+```
+
+### all
+
+- 全部 `fulfilled` 才 `fulfilled`（按输入顺序收集结果）
+- 任意一个 `rejected` 立即 `rejected`
+
+```js
+static all(iterable) {
+  return new Promise((resolve, reject) => {
+    const items = Array.from(iterable);
+
+    // 空数组直接 fulfilled []
+    if (items.length === 0) {
+      resolve([]);
+      return;
+    }
+
+    const result = new Array(items.length);
+    let count = 0;
+
+    items.forEach((item, index) => {
+      // 统一 Promise 化，兼容普通值
+      Promise.resolve(item).then(
+        (value) => {
+          result[index] = value;
+          count += 1;
+          if (count === items.length) resolve(result);
+        },
+        (reason) => reject(reason),
+      );
+    });
+  });
+}
+```
+
+### race
+
+- 谁先落态`（fulfilled/rejected）`就采用谁的结果
+
+```js
+static race(iterable) {
+  return new Promise((resolve, reject) => {
+    Array.from(iterable).forEach((item) => {
+      Promise.resolve(item).then(resolve, reject);
+    });
+  });
+}
+```

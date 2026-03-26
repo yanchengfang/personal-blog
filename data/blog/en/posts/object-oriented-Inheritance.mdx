@@ -1,0 +1,135 @@
+---
+title: "Object-Oriented - Inheritance"
+date: "2026-03-24"
+lastmod: "2026-03-24"
+tags:
+  - "javascript"
+summary: >-
+  A practical walkthrough of JavaScript inheritance: prototype chain, constructor inheritance,
+  combination inheritance, and parasitic combination inheritance, plus how extends/super map to them.
+---
+
+## Terminology
+
+> - `prototype`: a property on functions. It is used to share methods across instances.
+> - `__proto__ / [[Prototype]]`: the implicit prototype pointer on objects (often called an internal slot). It usually points to the constructor's prototype, can be reassigned to another object or `null`, and is the backbone of inheritance and prototype chains.
+
+## 1. Prototype Chain Inheritance
+
+**Key idea: the child prototype points to an instance of the parent.**
+
+!["prototype-chain-inheritance.png"](https://github.com/yanchengfang/note-assets/raw/master/javascript/prototype-chain-inheritance.png "Prototype chain inheritance")
+
+> - Inherits shared methods on the parent's prototype
+> - Cannot pass per-instance args to parent constructor when creating child instances
+> - Child prototype holds parent instance properties; reference-type properties become shared across instances
+
+```js
+// Example
+function Parent(name, age) {
+  this.name = name;
+  this.age = age;
+  this.arr = [1, 2, 3];
+}
+Parent.prototype.say = function () {
+  console.log(`${this.name} is ${this.age} years old`);
+};
+
+function Child() {}
+
+Child.prototype = new Parent("niko", 18);
+
+let c1 = new Child("zoyi", 1000);
+let c2 = new Child();
+
+c2.arr.push(4);
+c2.gender = "girl";
+
+console.log(c1.arr); // [1, 2, 3, 4] shared reference mutates globally
+console.log(c1.gender); // undefined: assigning primitive creates own property
+console.log(c2.gender); // girl
+c1.say(); // niko is 18 years old
+console.log(c1.constructor); // [Function: Parent]
+```
+
+> - Since `Child.prototype` is a `Parent` instance, `c1.say()` looks up `name/age` on `c1` first, then on `Child.prototype`.
+> - After `Child.prototype = new Parent()`, the default `constructor` no longer points to `Child`; lookup usually resolves to `Parent`.
+
+## 2. Constructor Inheritance
+
+**Key idea: call the parent as a normal function in child constructor via `call`, so `this` points to child instance.**
+
+> Only parent instance properties are inherited; methods on parent prototype are not (prototype chain is unchanged).
+
+```js
+// Example
+function Parent(name, age) {
+  this.name = name;
+  this.age = age;
+}
+Parent.prototype.say = function () {
+  console.log(`${this.name} is ${this.age} years old`);
+};
+
+function Child(name, age, gender) {
+  Parent.call(this, name, age);
+  this.gender = gender;
+}
+let c1 = new Child("zoyi", 1000, "girl");
+
+console.log(c1); // { name: "zoyi", age: 1000, gender: "girl" }
+c1.say(); // c1.say is not a function
+```
+
+## 3. Combination Inheritance
+
+**Key idea: combine prototype chain inheritance and constructor inheritance.**
+
+> - Advantage: inherits both parent instance properties and prototype methods
+> - Drawbacks:
+>
+> > 1. Parent constructor runs twice (once for child prototype, once for child instance), which is inefficient and less clean semantically.
+> > 2. Child instance creates same-named properties again, shadowing those on prototype and adding overhead.
+
+## 4. Parasitic Combination Inheritance
+
+!["parasitic-composition-inheritance"](https://github.com/yanchengfang/note-assets/raw/master/javascript/parasitic-composition-inheritance.png "Parasitic combination inheritance")
+
+> - Inherits both parent instance properties and prototype methods
+> - Calls parent constructor only once
+> - Uses `Object.create()` as a bridge between `Child.prototype` and `Parent.prototype`
+> - Note: members added to `Child.prototype` before resetting it will be overwritten; usually fix `constructor` manually
+
+```js
+function Parent(name, age) {
+  this.name = name;
+  this.age = age;
+}
+Parent.prototype.say = function () {
+  console.log(`${this.name} is ${this.age} years old`);
+};
+
+function Child(name, age) {
+  Parent.call(this, name, age);
+}
+// Child.prototype -> newObj -> Parent.prototype
+Child.prototype = Object.create(Parent.prototype);
+
+// Restore constructor after prototype replacement
+Child.prototype.constructor = Child;
+
+let c1 = new Child("zoyi", 1000);
+c1.say(); // zoyi is 1000 years old
+console.log(c1.constructor); // [Function: Child]
+```
+
+### ES6 class inheritance: `extends`
+
+Semantically, this is the standardized form of parasitic combination inheritance:
+
+1. In constructor, `super()` runs parent initialization before `this` can be used.
+   > Similar to `Parent.call(this, ...)`, but not equivalent to a plain function call.
+   > In instance methods, `super` points to `Parent.prototype`; in static methods, it points to `Parent`.
+2. Builds prototype chain between `Child.prototype` and `Parent.prototype`.
+3. Builds static inheritance chain (`Child.__proto__ === Parent`), so child can access parent static members.
+   > This is often equivalent to `Object.setPrototypeOf(Child, Parent)`; using `instance.constructor` to reach static methods is only an access path, not instance inheritance.

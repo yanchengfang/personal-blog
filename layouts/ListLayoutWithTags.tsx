@@ -25,7 +25,7 @@ interface ListLayoutProps {
 }
 
 function Pagination({ totalPages, currentPage }: PaginationProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const segments = pathname.split("/");
   const lastSegment = segments[segments.length - 1];
   const basePath = pathname
@@ -85,7 +85,7 @@ export default function ListLayoutWithTags({
   initialDisplayPosts = [],
   pagination,
 }: ListLayoutProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const { lang } = useParams();
   const tagDataRecord = tagData as Record<string, Record<string, number>>;
   const tagCounts = tagDataRecord[lang as string] || {};
@@ -123,9 +123,10 @@ export default function ListLayoutWithTags({
               )}
               <ul>
                 {sortedTags.map((t) => {
+                  const activeTagSlug = pathname.split("/tags/")[1];
                   return (
                     <li key={t} className="my-3">
-                      {decodeURI(pathname.split("/tags/")[1]) === slug(t) ? (
+                      {activeTagSlug && decodeURI(activeTagSlug) === slug(t) ? (
                         <h3 className="text-primary-500 inline px-3 py-2 text-sm font-bold uppercase">
                           {`${tagsList[t]} (${tagCounts[t]})`}
                         </h3>

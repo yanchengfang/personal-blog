@@ -1,0 +1,113 @@
+---
+title: "Vite 和 Webpack 中如何处理环境变量"
+date: "2026-03-20"
+lastmod: "2026-03-24"
+tags:
+  - "enginnering"
+summary: >-
+  梳理 Vite 与 Webpack 的环境变量加载与注入流程，对比 mode、dotenv、loadEnv 与 import.meta 关键能力。
+---
+
+## 环境变量文件
+
+> `.env`: 所有环境都会加载
+> `.env.local`: 所有环境都会加载，但被 git 忽略
+> `.env.[mode]`: 只在指定模式下加载（如 .env.development、.env.production）
+> `.env.[mode].local`: 只在指定模式下加载，且被 git 忽略
+
+**备注**：后续加载的文件变量会覆盖前面的
+
+## 在 Webpack 工程中
+
+### 步骤
+
+1. 通过`cross env`配置脚本指定运行的环境
+   > `cross-env NODE_ENV=development`
+2. 在node环境中使用`process.env.NODE_ENV`来获取环境参数`mode`.
+
+3. 使用`dotenv`读取项目根目录下的对应`.env.[mode]`文件,解析其中的键值对，并将其挂载到**node环境**下的`process.env`对象上，之后就可以通过`process.env.VAR_NAME`在node中访问它们。
+
+4. 将读取到的环境变量注入业务代码，作为全局变量
+   > 1. 通过 new Webpack.DefinePlugin 直接定义
+   > 2. 使用 dotenv 加载 .env 文件，再通过 dotenv-webpack 插件注入
+
+---
+
+## 在 Vite 工程中
+
+### 步骤
+
+1. 默认运行`vite`是开发环境 --mode development，`vite build`是运行生产环境 --mode production. 如`vite --mode test`，指定测试环境，对应`.env.test`文件
+   > vite中的`mode`指的是环境参数，而webpack中的`mode`指的是打包方式
+2. 环境参数可以从`defineConfig`回调函数中的config参数获取
+3. 在配置文件中想要获取`.env`文件中的变量，需要使用vite自带的`loadEnv`来加载
+
+   ```js
+   import { defineConfig, loadEnv } from "vite";
+
+   export default defineConfig(({ command, mode }) => {
+     // 加载环境变量
+     const env = loadEnv(mode, process.cwd(), "");
+     // 现在env中包含所有环境变量，包括没有前缀的
+     // 如果需要只获取VITE_前缀的，可以省略第三个参数或指定'VITE_'
+     // 如果希望所有变量都可用，第三个参数传''（空字符串）
+
+     // 可以在配置中使用env
+     return {
+       // 比如设置base
+       base: env.VITE_BASE_URL || "/",
+       // 或者通过define注入更多变量
+       define: {
+         __APP_VERSION__: JSON.stringify(env.APP_VERSION),
+       },
+     };
+   });
+   ```
+
+4. 在任何客户端代码（.js、.jsx、.ts、.vue、.svelte 等）中，通过`import.meta.env`对象访问这些变量，无需手动添加。
+   > - Vite 默认只暴露`VITE_`开头的变量，这是一种安全机制。如果你确实需要将其他变量暴露给客户端，可以使用`define`插件手动注入
+   > - 还包含一些内置变量也会自动注入到客户端页面：
+   >   > MODE：当前运行模式（development / production 等）
+   >   > BASE_URL：应用部署的基础路径（由 base 配置项决定）
+   >   > PROD：是否为生产环境（布尔值）
+   >   > DEV：是否为开发环境（布尔值）
+   >   > SSR：是否为服务端渲染（布尔值）
+
+### import.meta[]
+
+是一个给 JavaScript 模块暴露特定上下文元数据的全局对象，包含了当前模块的信息，比如模块的 URL 。它包含哪些具体属性，取决于代码运行的环境（如浏览器、Node.js、Bun 或 Nuxt 框架）。
+
+**1. import.meta.url**：获取当前模块的URL, 定位模块本身的位置。
+
+```js
+// 假设文件地址为：/projects/my-app/src/utils.js
+console.log(import.meta.url);
+// 浏览器环境输出: http://localhost:3000/src/utils.js
+// Node.js 环境输出: file:///projects/my-app/src/utils.js
+```
+
+> 结合`new URL`加载资源：这是处理静态资源路径的推荐方式，能保证路径总是正确的
+
+**2. import.meta.resolve**：解析相对路径,**基于当前模块的URL**来解析其他模块或文件的路径，特别适合在Node环境中替代`__dirname`使用。
+
+**3. import.meta.hot**：实现热模块替换 (HMR)，在开发模式下，可以利用它来实现模块热替换，提升开发效率。
+
+```js
+// 使用 Pinia 状态管理库时的 HMR 示例
+if (import.meta.hot) {
+  import.meta.hot.accept((newModule) => {
+    // 当模块更新时，执行一些操作，比如重新应用状态
+    console.log("模块已热替换", newModule);
+  });
+}
+```
+
+**4. import.meta.glob**：
+提供一个路径模式，构建工具（Vite）会在编译时静态分析，找到所有匹配的文件，并返回一个方便你操作的对象。
+
+> `const modules = import.meta.glob('./dir/\*.js', { eager: true })`
+> eager=true，返回模块为懒加载模式
+
+**4. import.meta.env**： 可以方便地获取进程的环境变量。
+
+**备注**： `import.meta.env` `import.meta.glob` `import.meta.hot`，是客户端专属API，不支持在node环境下访问。

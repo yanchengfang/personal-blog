@@ -1,0 +1,175 @@
+---
+title: "Closure Issues with Timers in useEffect"
+date: "2026-03-19"
+lastmod: "2026-03-19"
+tags:
+  - "react"
+summary: >-
+  Explains timer-related closure pitfalls in useEffect: repeated timers, stale state, and leak risks,
+  with fixes using cleanup, debounce-like behavior, functional updates, and useRef.
+---
+
+## About timers
+
+> - Once a timer is cleared, pending callback tasks will not run.
+> - A timer is destroyed automatically after its callback completes.
+> - Memory leak risk appears when component unmounts while pending timer callbacks still exist; closures keep referenced external variables alive.
+
+## Problem 1
+
+**Expected behavior**: print click count 2 seconds after clicking.
+
+```js
+// Problematic code
+export default function Test() {
+  const [n, setN] = useState(0);
+
+  useEffect(() => {
+    setTimeout(() => {
+      console.log(n);
+    }, 2000);
+  });
+
+  return (
+    <div>
+      <h1>{n}</h1>
+      <button
+        onClick={() => {
+          setN((prevN) => prevN + 1);
+        }}
+      >
+        Click
+      </button>
+    </div>
+  );
+}
+```
+
+![errorLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/errorLog.png "Problem No.1 snapshot log")
+
+**Result**: after opening page and clicking twice quickly, console prints `0 1 2` around two seconds later.
+
+**Why this happens**:
+
+1. Initial render runs `useEffect` and starts timer1.
+2. First click triggers `setN`, rerender happens, `useEffect` runs again, timer2 starts.
+3. Second click triggers another rerender, timer3 starts.
+4. `useEffect` runs after paint; each render forms its own closure, timer callback captures `n` from that closure.
+5. Three timers fire in sequence and print each captured value.
+
+**Fix**: clear previous timer within 2 seconds (debounce-like effect).
+
+```js
+useEffect(() => {
+  const timer = setTimeout(() => {
+    console.log(n);
+  }, 2000);
+  return () => clearTimeout(timer);
+});
+```
+
+![rightLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/rightLog.png "Problem No.1 snapshot log")
+
+## Problem 2
+
+**Expected behavior**: coupon countdown. After 5 seconds show "Event ended".
+
+```js
+// Problematic code
+export default function Test() {
+  const [n, setN] = useState(5);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setN(n - 1);
+      console.log(n);
+      if (n === 0) {
+        clearInterval(timer);
+      }
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  });
+
+  return (
+    <div>
+      <h1>{n || "Event ended"}</h1>
+    </div>
+  );
+}
+```
+
+![errorLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/errorLog2.png "Problem No.2 snapshot log")
+
+**Result**: interval does not stop at the end, and logged values lag behind UI.
+
+**Why this happens**:
+
+1. Timer never really stops: cleanup clears previous interval, but each `setN` rerender creates a new interval again.
+2. Logged value lags: callback reads stale `n` from old closure.
+
+**Fix**: make timer unique and read latest state through functional update (`setN(prevN => prevN - 1)`).
+
+```js
+useEffect(() => {
+  const timer = setInterval(() => {
+    setN((prevN) => {
+      const next = prevN - 1;
+      console.log({ n1: n, n2: next });
+      !next && clearInterval(timer);
+      return next;
+    });
+  }, 1000);
+  return () => {
+    clearInterval(timer);
+  };
+}, []);
+```
+
+![rightLog.png](https://github.com/yanchengfang/note-assets/raw/master/react/rightLog2.png "Problem No.2 snapshot log")
+
+Because this unique interval is created once at mount, `n1` still points to the first closure value (always 5).
+
+### Why can `n2` always get the latest value?
+
+> `setN(prevN => ...)` is queued by React. During render, React processes update functions in order and passes the latest computed state to each function. In async scenarios like timers, closure-captured `n` may be stale, but functional updates rely on React-managed current state, so they stay fresh.
+
+## Using `useRef` to bypass closure staleness
+
+### Principle
+
+> Local variables in function components (including state values in closure) are recreated each render.  
+> A ref object persists across renders during the whole component lifecycle, and updating `.current` does not trigger rerender.  
+> So we can sync latest state into `ref.current` every render, then read `ref.current` in timer callbacks.
+
+```js
+import { useState, useEffect, useRef } from "react";
+
+export default function Test() {
+  const [n, setN] = useState(5);
+  const nRef = useRef(n);
+
+  useEffect(() => {
+    nRef.current = n;
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const currentN = nRef.current;
+      console.log("Current n:", currentN);
+      if (currentN > 0) {
+        setN(currentN - 1);
+      } else {
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return <h1>{n || "Event ended"}</h1>;
+}
+```
+
+**Note**: this is a general pattern, useful not only for timers but also event listeners, `requestAnimationFrame`, and other async callbacks.

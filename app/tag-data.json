@@ -1,17 +1,28 @@
 {
-  "en": {
+  "zh": {
+    "es6": 1,
+    "javascript": 2,
+    "enginnering": 1,
+    "react": 1,
+    "document": 1,
+    "log": 3,
     "coding": 1,
     "guide": 3,
-    "log": 3,
-    "feature": 1,
+    "feature": 2,
+    "draft": 1,
     "essay": 1
   },
-  "zh": {
+  "en": {
+    "es6": 1,
+    "javascript": 2,
+    "enginnering": 1,
+    "react": 1,
+    "document": 1,
+    "log": 3,
     "coding": 1,
     "guide": 3,
-    "log": 3,
-    "feature": 1,
-    "document": 1,
+    "feature": 2,
+    "draft": 1,
     "essay": 1
   }
 }

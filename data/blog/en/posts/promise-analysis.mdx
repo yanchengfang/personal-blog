@@ -1,0 +1,310 @@
+---
+title: "Promise/A+ Analysis"
+date: "2026-03-26"
+lastmod: "2026-03-26"
+tags:
+  - "es6"
+  - "javascript"
+summary: >-
+  A deep dive into Promise/A+: states and timing, then-chain resolution and thenable flattening,
+  error propagation, plus resolve/reject/catch/finally/all/race implementations.
+---
+
+# Promise/A+ Analysis
+
+## What You Should Understand About Promise
+
+### Promise has three states
+
+- `pending`, `fulfilled`, `rejected`
+- Once state changes from `pending` to `fulfilled/rejected`, it is settled and cannot change again
+- `executor()`, `resolve()`, `reject()` run synchronously by default
+
+```js
+const executor = (resolve, reject) => {
+  resolve("fulfilled"); // settle as fulfilled
+  reject("rejected"); // ignored after settlement
+};
+new Promise(executor);
+```
+
+### `reject()` vs `throw new Error()` inside executor
+
+- In executor's synchronous phase, `throw new Error()` is captured by Promise internals (`try...catch`), then converted to `reject(error)`.
+- So in sync code, both `reject(reason)` and `throw new Error()` move Promise to `rejected`.
+- After `catch` or `then(_, onRejected)`, returning a normal value switches downstream chain to `fulfilled`.
+
+```js
+Promise.reject("initial error")
+  .catch((err) => {
+    console.log("Caught:", err);
+    return "recovered value"; // downstream becomes fulfilled
+  })
+  .then((value) => {
+    console.log("Next then gets:", value); // Next then gets: recovered value
+    return "keep going";
+  })
+  .catch(() => {
+    console.log("This catch will not run, error is already handled");
+  });
+```
+
+- But `throw new Error()` inside an **async callback** is outside Promise constructor's sync context, so current Promise `.catch` usually cannot catch it.
+
+```js
+// Async throw cannot be caught by this promise chain
+new Promise((resolve, reject) => {
+  setTimeout(() => {
+    throw new Error("async error"); // uncaught global error
+  }, 0);
+}).catch((e) => console.log(e)); // won't run
+
+// Correct: pass async errors to reject explicitly
+new Promise((resolve, reject) => {
+  setTimeout(() => {
+    try {
+      throw new Error("async error");
+    } catch (e) {
+      reject(e);
+    }
+  }, 0);
+}).catch((e) => console.log("Caught:", e.message));
+```
+
+### When `then(onFulfilled, onRejected)` callbacks run
+
+- Calling `p.then(...)` itself is synchronous.
+- Promise `p` state determines whether and which reaction (`onFulfilled` / `onRejected`) runs.
+  1. If state is already settled, `then` schedules the matching reaction as a microtask (e.g. `queueMicrotask`) and returns a new Promise.
+     > `queueMicrotask` pushes callbacks to microtask queue and is supported in browsers and Node.js.
+  2. If `p` is still pending, reactions are stored first. After `resolve/reject`, they are scheduled as microtasks.  
+     **So callbacks are asynchronous even though `then` call is synchronous.**
+
+```js
+// Schedule into microtask queue
+function asyncRun(fn) {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(fn);
+    return;
+  }
+  setTimeout(fn, 0);
+}
+// In Promise.then()
+const runFulfilled = () => {
+  asyncRun(() => {
+    try {
+      const x = realOnFulfilled(this.value);
+      resolvePromise(promise2, x, resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+if (this.state === FULFILLED) {
+  runFulfilled();
+} else if (this.state === REJECTED) {
+  runRejected();
+} else {
+  // pending: store now, trigger later
+  this.onFulfilledCallbacks.push(runFulfilled);
+  this.onRejectedCallbacks.push(runRejected);
+}
+```
+
+### What happens in `Promise.then()` chaining
+
+Example:
+
+```js
+const p2 = p1.then(fn1, fn2);
+const p3 = p2.then(fn3, fn4);
+```
+
+**Question: The chain shape is built during sync code, but what controls each callback execution?**
+
+- A Promise state is determined by `resolve()` / `reject()`.
+- `p1` state controls `fn1 / fn2`, and returns `p2`.
+- Then `p2` state controls `fn3 / fn4`.  
+  **So the core is: how do we determine `p2` state?**
+- `p2` state is determined by return value `x` of callback in previous `.then`.
+
+  > - If `x` is not thenable, `p2` becomes fulfilled with `x`.
+  > - If `x` is object/function, it may be thenable.
+  > - If `x` is thenable, its own state machine controls outcome, and `p2` adopts it.
+  > - If outer Promise resolves with inner Promise, spec says outer Promise should **follow** inner final result (flatten), not pass Promise object as plain value.
+
+  ```js
+  const p = new Promise((resolve, reject) => {
+    const value = Promise.reject("rejected");
+    resolve(value);
+  });
+  p.then(
+    (val) => {
+      console.log("success", val); // won't run
+    },
+    (reason) => {
+      console.log("fail", reason); // fail rejected
+    },
+  );
+  ```
+
+- Double protection:
+  > - `resolve` fast-path for native Promise (`value instanceof Promise`) is an optimization.
+  > - `resolvePromise` via `then.call` for generic thenable is spec-critical.
+  > - Combining both gives performance + compatibility.
+
+```js
+// resolve implementation
+const resolve = (value) => {
+  if (value instanceof Promise) {
+    value.then(resolve, reject);
+    return;
+  }
+  // ...
+};
+
+// resolvePromise implementation
+function resolvePromise(promise2, x, resolve, reject) {
+  // 1. Prevent self-resolution cycles
+  if (promise2 === x) {
+    reject(new TypeError("Chaining cycle detected for promise"));
+    return;
+  }
+
+  // 2. Only object/function can be thenable
+  if (x !== null && (typeof x === "object" || typeof x === "function")) {
+    let called = false;
+
+    try {
+      const then = x.then;
+
+      if (typeof then === "function") {
+        then.call(
+          x,
+          (y) => {
+            if (called) return;
+            called = true;
+            resolvePromise(promise2, y, resolve, reject);
+          },
+          (r) => {
+            if (called) return;
+            called = true;
+            reject(r);
+          },
+        );
+        return;
+      }
+    } catch (error) {
+      if (called) return;
+      called = true;
+      reject(error);
+      return;
+    }
+  }
+
+  // 3. Plain value: fulfill directly
+  resolve(x);
+}
+```
+
+---
+
+## Other Promise APIs
+
+### resolve
+
+- If input is already a Promise, return it directly
+- Otherwise wrap into fulfilled Promise
+
+```js
+static resolve(value) {
+  if (value instanceof Promise) return value;
+  return new Promise((resolve) => resolve(value));
+}
+```
+
+### reject
+
+- Static method on Promise
+- Returns a rejected Promise directly
+
+```js
+static reject(reason) {
+  return new Promise((_, reject) => reject(reason));
+}
+```
+
+### catch
+
+- Sugar for `then(null, onRejected)`
+
+```js
+catch(onRejected) {
+  return this.then(null, onRejected);
+}
+```
+
+### finally
+
+- Does not alter previous value/error (unless finally throws or returns rejected)
+- Runs regardless of fulfilled/rejected
+
+```js
+finally(onFinally) {
+  const handler =
+    typeof onFinally === "function" ? onFinally : () => undefined;
+  return this.then(
+    (value) => Promise.resolve(handler()).then(() => value),
+    (reason) =>
+      Promise.resolve(handler()).then(() => {
+        throw reason;
+      }),
+  );
+}
+```
+
+### all
+
+- Fulfilled only when all are fulfilled (preserve input order)
+- Reject immediately once any item rejects
+
+```js
+static all(iterable) {
+  return new Promise((resolve, reject) => {
+    const items = Array.from(iterable);
+
+    if (items.length === 0) {
+      resolve([]);
+      return;
+    }
+
+    const result = new Array(items.length);
+    let count = 0;
+
+    items.forEach((item, index) => {
+      Promise.resolve(item).then(
+        (value) => {
+          result[index] = value;
+          count += 1;
+          if (count === items.length) resolve(result);
+        },
+        (reason) => reject(reason),
+      );
+    });
+  });
+}
+```
+
+### race
+
+- Whichever settles first (`fulfilled` or `rejected`) wins
+
+```js
+static race(iterable) {
+  return new Promise((resolve, reject) => {
+    Array.from(iterable).forEach((item) => {
+      Promise.resolve(item).then(resolve, reject);
+    });
+  });
+}
+```

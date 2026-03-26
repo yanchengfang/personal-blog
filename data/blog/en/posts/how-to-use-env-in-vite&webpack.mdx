@@ -1,0 +1,108 @@
+---
+title: "How to Handle Environment Variables in Vite and Webpack"
+date: "2026-03-20"
+lastmod: "2026-03-24"
+tags:
+  - "enginnering"
+summary: >-
+  A practical comparison of environment variable loading and injection in Vite and Webpack, including mode,
+  dotenv/loadEnv, and import.meta APIs.
+---
+
+## Environment variable files
+
+> `.env`: loaded in all environments  
+> `.env.local`: loaded in all environments, ignored by git  
+> `.env.[mode]`: loaded only for a specific mode (e.g. `.env.development`, `.env.production`)  
+> `.env.[mode].local`: mode-specific and ignored by git
+
+**Note**: later-loaded files override previously loaded values.
+
+## In a Webpack project
+
+### Steps
+
+1. Use `cross-env` in scripts to set runtime env:
+   > `cross-env NODE_ENV=development`
+2. Read mode in Node via `process.env.NODE_ENV`.
+3. Use `dotenv` to load matching `.env.[mode]` from project root, parse key-value pairs, and attach them to Node's `process.env`. Then access with `process.env.VAR_NAME`.
+4. Inject env values into business code as globals:
+   > 1. Define directly with `new Webpack.DefinePlugin`
+   > 2. Load `.env` via `dotenv`, then inject using `dotenv-webpack`
+
+---
+
+## In a Vite project
+
+### Steps
+
+1. `vite` defaults to dev mode (`--mode development`), `vite build` defaults to prod mode (`--mode production`).  
+   Example: `vite --mode test` loads `.env.test`.
+   > In Vite, `mode` means environment mode; in Webpack, `mode` mainly means bundling strategy.
+2. Read mode from `defineConfig` callback params.
+3. To access `.env` values in config, use Vite's `loadEnv`.
+
+   ```js
+   import { defineConfig, loadEnv } from "vite";
+
+   export default defineConfig(({ command, mode }) => {
+     // Load env variables
+     const env = loadEnv(mode, process.cwd(), "");
+     // env now includes all variables, including non-prefixed ones
+     // To load only VITE_-prefixed vars, omit the third arg or set it to "VITE_"
+     // To load everything, pass "" as third arg
+
+     return {
+       base: env.VITE_BASE_URL || "/",
+       define: {
+         __APP_VERSION__: JSON.stringify(env.APP_VERSION),
+       },
+     };
+   });
+   ```
+
+4. In client code (`.js/.jsx/.ts/.vue/.svelte`), access env via `import.meta.env` directly.
+   > - By default, Vite only exposes vars prefixed with `VITE_` (security by design). To expose others, inject manually via `define`.
+   > - Built-in vars also available on client:
+   >   > `MODE`: current mode (`development` / `production` / etc.)  
+   >   > `BASE_URL`: app base path (from `base` config)  
+   >   > `PROD`: whether production mode (boolean)  
+   >   > `DEV`: whether development mode (boolean)  
+   >   > `SSR`: whether server-side rendering (boolean)
+
+### `import.meta[]`
+
+`import.meta` is a global metadata object for JavaScript modules. It contains context info about current module (for example module URL). Exact properties depend on runtime (browser, Node.js, Bun, Nuxt, etc.).
+
+**1. `import.meta.url`**: gets current module URL.
+
+```js
+// Assume file path: /projects/my-app/src/utils.js
+console.log(import.meta.url);
+// Browser: http://localhost:3000/src/utils.js
+// Node.js: file:///projects/my-app/src/utils.js
+```
+
+> Combined with `new URL(...)`, this is the recommended way to resolve static asset paths.
+
+**2. `import.meta.resolve`**: resolves relative paths based on current module URL, useful in Node as a replacement for `__dirname` patterns.
+
+**3. `import.meta.hot`**: enables HMR (Hot Module Replacement) in development.
+
+```js
+// HMR example with Pinia
+if (import.meta.hot) {
+  import.meta.hot.accept((newModule) => {
+    console.log("Module hot-updated", newModule);
+  });
+}
+```
+
+**4. `import.meta.glob`**: provide a glob pattern, then Vite statically analyzes and returns an object of matched modules at build time.
+
+> `const modules = import.meta.glob("./dir/*.js", { eager: true })`  
+> `eager=true` means eager import (not lazy loading)
+
+**5. `import.meta.env`**: convenient access to environment variables.
+
+**Note**: `import.meta.env`, `import.meta.glob`, and `import.meta.hot` are client-side APIs and are not available in plain Node runtime.
