@@ -13,8 +13,14 @@ services:
     ports:
       # Host port default to 80 (make sure host port 80 is free)
       - "${BLOG_HOST_PORT:-80}:80"
+      # Host port default to 443 (HTTPS)
+      - "${BLOG_HOST_SSL_PORT:-443}:443"
     volumes:
       - /opt/personal-blog/nginx:/etc/nginx/conf.d:ro
+      # Optional webroot path for ACME challenge files
+      - /opt/personal-blog/certbot/www:/var/www/certbot:ro
+      # Mount Let's Encrypt certificates from host
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - app
 
