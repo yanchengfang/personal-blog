@@ -21,6 +21,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 与本地 .env.production 等价：构建前写入，供 docker 内 next build 加载
+      - name: Write .env.production for Docker build
+        run: |
+          {
+            echo "NEXT_PUBLIC_GISCUS_REPO=${{ secrets.NEXT_PUBLIC_GISCUS_REPO }}"
+            echo "NEXT_PUBLIC_GISCUS_REPOSITORY_ID=${{ secrets.NEXT_PUBLIC_GISCUS_REPOSITORY_ID }}"
+            echo "NEXT_PUBLIC_GISCUS_CATEGORY=${{ secrets.NEXT_PUBLIC_GISCUS_CATEGORY }}"
+            echo "NEXT_PUBLIC_GISCUS_CATEGORY_ID=${{ secrets.NEXT_PUBLIC_GISCUS_CATEGORY_ID }}"
+          } > .env.production
+
       - name: Build Next.js docker image
         run: |
           docker build -t personal-blog:ci \

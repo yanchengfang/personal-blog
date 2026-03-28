@@ -2,6 +2,9 @@ FROM node:22-alpine AS builder
 
 ARG BASE_PATH=""
 ENV BASE_PATH=$BASE_PATH
+
+# Giscus 等 NEXT_PUBLIC_*：由仓库根目录 .env.production 提供（本地或 CI 从 Secrets 生成）；勿在此处写空 ENV，否则会覆盖 .env.production
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
