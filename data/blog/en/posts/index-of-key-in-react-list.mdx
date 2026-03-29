@@ -1,0 +1,135 @@
+---
+title: "Problems and Performance When Using Index as Key in React Lists"
+date: "2026-03-29"
+lastmod: "2026-03-29"
+tags:
+  - "react"
+summary: >-
+  Explains mis-reconciliation and uncontrolled input bugs when using index as list keys, compares stable ids, and discusses DOM diff trade-offs between correctness and performance.
+---
+
+## What `key` does
+
+- `key` identifies a node so React can **preserve** that node.
+- During updates, old fiber nodes are only diffed against **sibling-level** React elements, so keys must be unique at least within the same level.
+
+## Question: isn’t using the list index as `key` a perfect fit?
+
+## Examples
+
+### 1. Using `index` as `key` when removing the second list item
+
+![key-case1](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/key-case1.png "key-case1")
+
+**Diff behavior**:
+
+- First pass: same key and type → reuse the old node.
+- Second pass: same key and type, different props → reuse and update props to C.
+- Third pass: same key and type, different props → reuse and update props to D.
+- Fourth pass: no new node → mark for deletion.
+
+  > - In this scenario you effectively delete what was originally node D.
+  > - It _looks_ right, but node D pays the price.
+  > - Nodes C and D still trigger updates (you may see flicker in devtools).
+
+### 2. Using `id` as `key` when removing the second list item
+
+![key-case1](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/key-case2.png "key-case2")
+
+> Diff behavior: C and D do not update; the three original nodes remain and the real B is removed—the outcome we want. **(Details below.)**
+
+**The difference is that when the array changes, indices shift, keys on nodes move, and React treats equal keys as the same node—losing the original identity (protection).**
+
+### Note: it may look harmless, but **uncontrolled** form lists can render in the wrong order.
+
+![eg-input1](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/eg-input1.png "eg-input1")
+
+**Using `id` as `key` avoids the issue**
+
+![eg-input2](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/eg-input2.png "eg-input2")
+
+> - In an uncontrolled `<input />`, the value lives in the real DOM; React’s diff does not consult the DOM. Unstable keys cause the **commit** phase to reuse the wrong DOM node.
+> - Note: a **controlled** `<input />` is driven by outer state; deleting the first row removes that row’s data, so misalignment is uncommon.
+
+### Note: when `index` is acceptable
+
+Using `index` as `key` when deleting **only** the last item
+
+![eg-input3](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/eg-input3.png "eg-input3")
+
+> If order never changes, you only append/remove at the end, or the list is static, `index` often behaves like a stable id.
+
+### Note: worse than `index`
+
+- `key={Math.random()}` or `key={Date.now()}` every render forces full unmount/remount—worse than abusing `index`.
+- Duplicate keys break the rules; behavior is undefined.
+
+### Takeaway: keys must be **unique among siblings** and **stable** so reconciliation stays predictable.
+
+## Question: is performance always better with `id` as `key`?
+
+## Cost of DOM diff
+
+![multi-dom-diff](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/multi-dom-diff.png "multi-dom-diff")
+
+### Full diff for case 2:
+
+```js
+`old`: A  B  C  D
+`new`: A  C  D
+```
+
+1. First pass:
+   - Old A and new A: same key and type → reuse fiber A, continue.
+   - Old B and new C: same type, different key → exit first pass.
+
+2. Both sides not exhausted → enter **reordering** and the third pass.
+
+3. Third pass:
+
+   ![Dom-diff](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/dom-diff.png "Dom-diff move node")
+   - `lastPlacedIndex` tracks the last old index that did not need a move (starts at 0).
+   - Put remaining old fibers in a `Map`.
+   - Walk new nodes starting at C.
+   - Find C in the `Map` (same key and type), reuse, remove from `Map`.
+   - Compare old index with `lastPlacedIndex`; if larger, no move, update `lastPlacedIndex` to 2; otherwise mark a move.
+   - Same for D vs `lastPlacedIndex` → no move, `lastPlacedIndex` = 3.
+   - After new nodes are done, delete any old fibers left in the `Map`.
+
+4. Diff ends.
+
+   ```js
+   // Source: react-reconciler/ReactChildFiber/reconcileChildrenArray
+   // Handling moves: map remaining old children
+   const existingChildren = mapRemainingChildren(returnFiber, oldFiber);
+   for (; newIdx < newChildren.length; newIdx++) {
+     const newFiber = updateFromMap(
+       existingChildren,
+       returnFiber,
+       newIdx,
+       newChildren[newIdx],
+     );
+     if (newFiber !== null) {
+       if (shouldTrackSideEffects) {
+         if (newFiber.alternate !== null) {
+           existingChildren.delete(
+             newFiber.key === null ? newIdx : newFiber.key,
+           );
+         }
+       }
+       lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+       if (previousNewFiber === null) {
+         resultingFirstChild = newFiber;
+       } else {
+         previousNewFiber.sibling = newFiber;
+       }
+       previousNewFiber = newFiber;
+     }
+   }
+
+   if (shouldTrackSideEffects) {
+     existingChildren.forEach((child) => deleteChild(returnFiber, child));
+   }
+   ```
+
+### Summary: even with `id` keys, this simple case still needs multiple passes, a `Map`, and placement bookkeeping—typically **O(n)** time and **O(n)** space. So the emphasis should be on **correctness and control**, not assuming `id` is always faster than `index` in reconciliation.

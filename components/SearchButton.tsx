@@ -1,8 +1,13 @@
+"use client";
+
 import { AlgoliaButton } from "pliny/search/AlgoliaButton";
 import { KBarButton } from "pliny/search/KBarButton";
 import siteMetadata from "@/data/siteMetadata";
+import { useTranslations } from "next-intl";
 
 const SearchButton = () => {
+  const a11y = useTranslations("a11y");
+
   if (
     siteMetadata.search &&
     (siteMetadata.search.provider === "algolia" ||
@@ -12,7 +17,7 @@ const SearchButton = () => {
       siteMetadata.search.provider === "algolia" ? AlgoliaButton : KBarButton;
 
     return (
-      <SearchButtonWrapper aria-label="Search">
+      <SearchButtonWrapper aria-label={a11y("search-button")}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           fill="none"

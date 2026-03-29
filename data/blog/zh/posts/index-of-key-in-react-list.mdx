@@ -1,0 +1,141 @@
+---
+title: "React 中在列表使用 index 作为 key 引发的问题和性能分析"
+date: "2026-03-29"
+lastmod: "2026-03-29"
+tags:
+  - "react"
+summary: >-
+  说明列表中用 index 作为 key 时节点复用错位、非受控表单异常等问题，对比稳定 id，并结合 DOM diff 讨论性能与正确性。
+---
+
+## key 作用
+
+- key 用来标识同一个节点，可以 `保护` 这个节点。
+- React 在更新过程中老的fiber节点只和 `同层级` react元素进行 diff，因此 key 至少在同一层级应该是唯一的。
+
+## 问题：那在列表中用 index 作为 key 不正好吗？
+
+## 示例：
+
+### 1. 使用 index 作为 key 值，删除列表第二项
+
+![key-case1](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/key-case1.png "key-case1")
+
+**对比过程**：
+
+- 第一次：key、type 相同，复用老节点。
+- 第二次：key、type 相同，属性不同，复用老节点，并更新属性为 C。
+- 第三次：key、type 相同，属性不同，复用老节点，并更新属性为 D。
+- 第四次：新节点不存在，标记为删除。
+
+  > - 这种情况实际上删除的是原本的 D 节点。
+  > - 看似实现了效果，节点层面上，节点 D 承受了 “无妄之灾”。
+  > - 而且后面C、D节点触发了更新（节点在控制台有闪烁）。
+
+### 2. 使用 id 作为 key 值，删除列表第二项
+
+![key-case1](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/key-case2.png "key-case2")
+
+> 对比过程：C、D节点没有发生更新，原来三个节点保留，删除了真正的 B 节点，是我们想要的结果。**（详细对比后面展开说明）**
+
+**造成两者的差异是新数组的（index）变化，节点上原本的 key 发生了转移，而 React 认为 key 一样那就是同一个节点，失去了对原节点的定位（保护）。**
+
+### 注：上面看起来问题不大，但在 `非受控组件 `表单列表中，会出现渲染错位的 bug。
+
+![eg-input1](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/eg-input1.png "eg-input1")
+
+**使用 id 做为 key 则没问题**
+
+![eg-input2](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/eg-input2.png "eg-input2")
+
+> - 非受控组件`<input />`中的值存在于真实 DOM 中，react 的 diff 阶段也并不会有真实 DOM 参与，由于 key 的不稳定性，在 `commit阶段`，复用了错误的真实 DOM。
+> - 补充：受控组件 `<input />` 状态受使用它的（外层）组件的状态接管，由数据驱动，删除第一项就是第一项数据不存在了，所以一般不会出现错位。
+
+### 注：什么时候用 index 可以接受
+
+使用 index 作为 key 值，删除列表末尾项
+![eg-input3](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/eg-input3.png "eg-input3")
+
+> 列表顺序不变、只做尾部增删、或项从不插入/删除/重排等静态场景，index 往往与稳定 id 等价。
+
+### 注：比 index 更糟的情况
+
+- 每次渲染 key={Math.random()} 或 key={Date.now()} 会导致整列表卸载重建，比滥用 index 更伤。
+- 重复 key 违反规则，行为未定义。
+
+### 小结：React 中节点的 key 不仅要在同层级唯一，而且要稳定。这样 react 才能准确的执行渲染任务，写出可控的代码。
+
+## 问题：至于性能方面，在使用 id 作为 key 值后，性能真的很好吗？
+
+## DOM-DIff 的成本
+
+![multi-dom-diff](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/multi-dom-diff.png "multi-dom-diff")
+
+### 让我们仔细看下示例中第二种情况的 diff 完整过程：
+
+```js
+`old`：A  B  C  D
+`new`：A  C  D
+```
+
+1. 第一轮遍历：
+   - 老节点 A 和新节点 A，key 和 type 都相同，复用老fiber节点 A，循环继续。
+   - 老节点 B 和新节点 C，type相同，key不同。跳出第一轮循环。
+
+2. 由于老节点和新节点都还没遍历完，进入 `节点移动` 逻辑，直接进入第三轮循环。
+
+3. 第三轮循环：
+
+   ![Dom-diff](https://raw.githubusercontent.com/yanchengfang/note-assets/master/react/dom-diff.png "Dom-diff move node")
+   - 声明一个变量 lastPlacedIndex 标识最后不需要移动的老节点索引，默认 0。
+   - 将剩下的老fiber节点存入到 Map 中。
+   - 开始遍历剩下的新节点，从 C 开始。
+   - C 在 Map 中找到 key、type都相同的老节点，复用老fiber，并将老fiber C 从 Map 中删除。
+   - 对比老fiber的索引 和 lastPlacedIndex。大的话老fiber则保持不变，并将 lastPlacedIndex 变为老fiber的index，lastPlacedIndex = 2。如果小于的话，则标记老fiber 移动逻辑，lastPlacedIndex 不变。
+   - D 同样在 Map 中找到了对应老fiber，复用，对比 lastPlacedIndex。同样比 2 大则不需要移动，将 lastPlacedIndex = 3。
+   - 新节点遍历完毕，把 Map 中所有剩下的老fiber节点都标记为删除。
+
+4. Diff 结束。
+
+   ```js
+   // 源码位置：react-reconciler/ReactChildFiber/reconcileChildrenArray
+   // 开始处理移动的情况
+   // 将剩下的老fiber放入到map中
+   const existingChildren = mapRemainingChildren(returnFiber, oldFiber);
+   // 开始遍历剩下的虚拟DOM子节点
+   for (; newIdx < newChildren.length; newIdx++) {
+     const newFiber = updateFromMap(
+       existingChildren,
+       returnFiber,
+       newIdx,
+       newChildren[newIdx],
+     );
+     if (newFiber !== null) {
+       if (shouldTrackSideEffects) {
+         // 如果要跟踪副作用，并且有老Fiber
+         if (newFiber.alternate !== null) {
+           existingChildren.delete(
+             newFiber.key === null ? newIdx : newFiber.key,
+           );
+         }
+       }
+       // 指定新的fiber的存放位置，并且给lastPlacedIndex赋值
+       lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
+       if (previousNewFiber === null) {
+         resultingFirstChild = newFiber; // 这个newFiber是大儿子
+       } else {
+         // 否则说明不是大儿子，就把这个newFiber添加上一个子节点后面
+         previousNewFiber.sibling = newFiber;
+       }
+       // 让newFiber成为最后一个或者说上一个子fiber
+       previousNewFiber = newFiber;
+     }
+   }
+
+   if (shouldTrackSideEffects) {
+     // 等全部处理完，删除map中所有剩下的老fiber
+     existingChildren.forEach((child) => deleteChild(returnFiber, child));
+   }
+   ```
+
+### 总结：可以看出使用 id 作为 key 值，在这种简单的场景下所需要的操作都不少，最坏三轮循环，建 Map、重新扫描挂节点副作用，典型时间 O(n)和空间 O(n)。因此在性能分析上，稳定 `key + 标准列表` 并非 reconcile 一定比 `index` 快。对比之下，更应该强调的是它的正确性和可控性。

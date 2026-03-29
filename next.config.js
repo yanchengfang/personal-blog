@@ -1,3 +1,4 @@
+const path = require("path");
 const { withContentlayer } = require("next-contentlayer2");
 const createNextIntlPlugin = require("next-intl/plugin");
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
@@ -72,6 +73,9 @@ module.exports = () => {
     trailingSlash: true,
     turbopack: {
       root: process.cwd(),
+      resolveAlias: {
+        kbar: path.resolve(__dirname, "node_modules/pliny/node_modules/kbar"),
+      },
       rules: {
         "*.svg": {
           loaders: ["@svgr/webpack"],
@@ -98,6 +102,12 @@ module.exports = () => {
       ];
     },
     webpack: (config, options) => {
+      // 与 pliny 共用嵌套的 kbar，供本地搜索组件 import
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        kbar: path.resolve(__dirname, "node_modules/pliny/node_modules/kbar"),
+      };
+
       config.module.rules.push({
         test: /\.svg$/,
         use: [

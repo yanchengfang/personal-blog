@@ -1,28 +1,28 @@
 {
-  "en": {
-    "coding": 1,
-    "guide": 3,
-    "enginnering": 1,
-    "log": 3,
-    "feature": 2,
-    "draft": 1,
-    "javascript": 2,
-    "document": 1,
-    "es6": 1,
-    "essay": 1,
-    "react": 1
-  },
   "zh": {
     "coding": 1,
     "guide": 3,
     "enginnering": 1,
+    "react": 2,
     "log": 3,
     "feature": 2,
     "draft": 1,
     "javascript": 2,
     "document": 1,
     "es6": 1,
-    "essay": 1,
-    "react": 1
+    "essay": 1
+  },
+  "en": {
+    "coding": 1,
+    "guide": 3,
+    "enginnering": 1,
+    "react": 2,
+    "log": 3,
+    "feature": 2,
+    "draft": 1,
+    "javascript": 2,
+    "document": 1,
+    "es6": 1,
+    "essay": 1
   }
 }

@@ -1,11 +1,14 @@
+"use client";
+
 import siteMetadata from "@/data/siteMetadata";
 import headerNavLinks from "@/data/headerNavLinks";
-import Logo from "@/data/logo.svg";
+import Logo from "../public/static/favicons/logo.jpg";
 import Image from "next/image";
 import Link from "./Link";
 import MobileNav from "./MobileNav";
 import ThemeSwitch from "./ThemeSwitch";
 import SearchButton from "./SearchButton";
+import LanguageSwitcher from "./LanguageSwitcher";
 import { useTranslations } from "next-intl";
 
 const Header = () => {
@@ -19,18 +22,9 @@ const Header = () => {
     <header className={headerClass}>
       <Link href="/" aria-label={siteMetadata.headerTitle}>
         <div className="flex items-center justify-between">
-          <div className="mr-3">
-            {typeof Logo === "function" ? (
-              <Logo />
-            ) : (
-              <Image
-                src={Logo.src}
-                alt="Logo"
-                width={54}
-                height={44}
-                priority
-              />
-            )}
+          <div className="mr-3 mt-1.5">
+            {/* Tailwind preflight 对 img 使用 height:auto，会盖过固定高度；用 className 锁定盒尺寸 */}
+            <Image alt="Logo" src={Logo.src} height={55} width={55} priority />
           </div>
           {typeof siteMetadata.headerTitle === "string" ? (
             <div className="hidden h-6 text-2xl font-semibold sm:block">
@@ -56,7 +50,10 @@ const Header = () => {
             ))}
         </div>
         <SearchButton />
-        <ThemeSwitch />
+        <div className="flex items-center gap-2">
+          <ThemeSwitch />
+          <LanguageSwitcher />
+        </div>
         <MobileNav />
       </div>
     </header>

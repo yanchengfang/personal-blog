@@ -3,9 +3,10 @@
   "short_name": "",
   "icons": [
     {
-      "src": "/android-chrome-96x96.png",
-      "sizes": "96x96",
-      "type": "image/png"
+      "src": "/static/favicons/favicon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "theme_color": "#000000",

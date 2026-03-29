@@ -1,6 +1,9 @@
-{ 
+{
   "lang": {
-    "locale": "zh"
+    "locale": "zh",
+    "label-zh": "简体中文",
+    "label-en": "English",
+    "language-select": "界面语言"
   },
   "desc": {
     "latest": "最新",
@@ -30,6 +33,39 @@
   },
   "search": {
     "placeholder": "输入命令或搜索...",
-    "content": "内容"
+    "content": "内容",
+    "loading": "加载中…",
+    "no-results": "没有匹配结果",
+    "esc": "ESC"
+  },
+  "a11y": {
+    "published-on": "发布日期",
+    "authors": "作者",
+    "name": "姓名",
+    "twitter": "Twitter",
+    "tags": "标签",
+    "avatar": "头像",
+    "search-articles": "搜索文章",
+    "scroll-to-comment": "跳转到评论",
+    "scroll-to-top": "回到顶部",
+    "previous-post": "上一篇：{title}",
+    "next-post": "下一篇：{title}",
+    "view-tagged": "查看标签 {tag} 的文章",
+    "read-more-detail": "阅读全文：{title}",
+    "link-to-title": "链接：{title}",
+    "search-button": "搜索"
+  },
+  "post": {
+    "discuss-twitter": "在 X 上讨论",
+    "view-github": "在 GitHub 查看"
+  },
+  "list": {
+    "search-placeholder": "搜索文章…",
+    "no-posts": "暂无文章",
+    "no-tags": "暂无标签",
+    "page-of": "{current} / {total}"
+  },
+  "footer": {
+    "theme-credit": "Tailwind Next.js 主题"
   }
 }

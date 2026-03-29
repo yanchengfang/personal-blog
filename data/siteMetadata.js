@@ -1,8 +1,8 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: "Next.js Starter Blog",
-  author: "Tails Azimuth",
-  headerTitle: "TailwindBlog",
+  title: "Personal Blog of Summery",
+  author: "Summery",
+  headerTitle: "Summery Blog",
   description: "A blog created with Next.js and Tailwind.css",
   language: "en-us",
   theme: "system", // system, dark or light
@@ -71,17 +71,15 @@ const siteMetadata = {
       reactions: "1", // Emoji reactions: 1 = enable / 0 = disable
       // Send discussion metadata periodically to the parent window: 1 = enable / 0 = disable
       metadata: "0",
-      // theme example: light, dark, dark_dimmed, dark_high_contrast
-      // transparent_dark, preferred_color_scheme, custom
+      // 亮色/暗色 Giscus 主题名；由 components/Comments.tsx 根据根项目 next-themes 选用
       theme: "light",
-      // theme when dark mode
       darkTheme: "transparent_dark",
       // If the theme option above is set to 'custom`
       // please provide a link below to your custom theme css file.
       // example: https://giscus.app/themes/custom_example.css
       themeURL: "",
-      // This corresponds to the `data-lang="en"` in giscus's configurations
-      lang: "zh-CN",
+      // 默认语言；文章页实际由 components/Comments.tsx 按当前 locale 覆盖
+      lang: "en",
     },
   },
   search: {

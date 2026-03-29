@@ -10,6 +10,8 @@ const MAX_DISPLAY = 5;
 export default async function Home({ posts }) {
   const t = await getTranslations("desc");
   const l = await getTranslations("lang");
+  const a11y = await getTranslations("a11y");
+  const tl = await getTranslations("list");
   return (
     <>
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -22,7 +24,7 @@ export default async function Home({ posts }) {
           </p>
         </div>
         <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-          {!posts.length && "No posts found."}
+          {!posts.length && tl("no-posts")}
           {posts.slice(0, MAX_DISPLAY).map((post) => {
             const { slug, date, title, summary, tags } = post;
             return (
@@ -30,7 +32,7 @@ export default async function Home({ posts }) {
                 <article>
                   <div className="space-y-2 xl:grid xl:grid-cols-4 xl:items-baseline xl:space-y-0">
                     <dl>
-                      <dt className="sr-only">Published on</dt>
+                      <dt className="sr-only">{a11y("published-on")}</dt>
                       <dd className="text-base leading-6 font-medium text-gray-500 dark:text-gray-400">
                         <time dateTime={date}>
                           {formatDate(date, l("locale"))}
@@ -62,7 +64,7 @@ export default async function Home({ posts }) {
                         <Link
                           href={`/blog/${slug}`}
                           className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-                          aria-label={`Read more: "${title}"`}
+                          aria-label={a11y("read-more-detail", { title })}
                         >
                           {t("read-more")} &rarr;
                         </Link>
@@ -80,7 +82,7 @@ export default async function Home({ posts }) {
           <Link
             href="/blog"
             className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-            aria-label="All posts"
+            aria-label={t("all-posts")}
           >
             {t("all-posts")} &rarr;
           </Link>

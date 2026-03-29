@@ -26,12 +26,12 @@ interface ListLayoutProps {
 
 function Pagination({ totalPages, currentPage }: PaginationProps) {
   const pathname = usePathname() ?? "";
-  const segments = pathname.split("/");
-  const lastSegment = segments[segments.length - 1];
+  const t = useTranslations("desc");
+  const tl = useTranslations("list");
   const basePath = pathname
-    .replace(/^\//, "") // Remove leading slash
-    .replace(/\/page\/\d+\/?$/, "") // Remove any trailing /page
-    .replace(/\/$/, ""); // Remove trailing slash
+    .replace(/^\//, "")
+    .replace(/\/page\/\d+\/?$/, "")
+    .replace(/\/$/, "");
   const prevPage = currentPage - 1 > 0;
   const nextPage = currentPage + 1 <= totalPages;
 
@@ -43,7 +43,7 @@ function Pagination({ totalPages, currentPage }: PaginationProps) {
             className="cursor-auto disabled:opacity-50"
             disabled={!prevPage}
           >
-            Previous
+            {t("previous")}
           </button>
         )}
         {prevPage && (
@@ -55,23 +55,23 @@ function Pagination({ totalPages, currentPage }: PaginationProps) {
             }
             rel="prev"
           >
-            Previous
+            {t("previous")}
           </Link>
         )}
         <span>
-          {currentPage} of {totalPages}
+          {tl("page-of", { current: currentPage, total: totalPages })}
         </span>
         {!nextPage && (
           <button
             className="cursor-auto disabled:opacity-50"
             disabled={!nextPage}
           >
-            Next
+            {t("next")}
           </button>
         )}
         {nextPage && (
           <Link href={`/${basePath}/page/${currentPage + 1}`} rel="next">
-            Next
+            {t("next")}
           </Link>
         )}
       </nav>
@@ -92,11 +92,13 @@ export default function ListLayoutWithTags({
   const tagKeys = Object.keys(tagCounts);
   const sortedTags = tagKeys.sort((a, b) => tagCounts[b] - tagCounts[a]);
   const l = useTranslations("lang");
+  const d = useTranslations("desc");
+  const a11y = useTranslations("a11y");
   const tagsList =
     allTags.find((i) => i.language === l("locale"))?.tagsMap || {};
   const displayPosts =
     initialDisplayPosts.length > 0 ? initialDisplayPosts : posts;
-  const allPost = `${l("locale") === "en" ? "All Posts" : "全部"}`;
+  const allPost = d("all-posts");
 
   return (
     <>
@@ -134,7 +136,7 @@ export default function ListLayoutWithTags({
                         <Link
                           href={`/tags/${slug(t)}`}
                           className="hover:text-primary-500 dark:hover:text-primary-500 px-3 py-2 text-sm font-medium text-gray-500 uppercase dark:text-gray-300"
-                          aria-label={`View posts tagged ${t}`}
+                          aria-label={a11y("view-tagged", { tag: t })}
                         >
                           {`${tagsList[t]} (${tagCounts[t]})`}
                         </Link>
@@ -153,7 +155,7 @@ export default function ListLayoutWithTags({
                   <li key={path} className="py-5">
                     <article className="flex flex-col space-y-2 xl:space-y-0">
                       <dl>
-                        <dt className="sr-only">Published on</dt>
+                        <dt className="sr-only">{a11y("published-on")}</dt>
                         <dd className="text-base leading-6 font-medium text-gray-500 dark:text-gray-400">
                           <time dateTime={date} suppressHydrationWarning>
                             {formatDate(date, l("locale"))}

@@ -1,8 +1,11 @@
 import Link from "./Link";
 import siteMetadata from "@/data/siteMetadata";
 import SocialIcon from "@/components/social-icons";
+import { getTranslations } from "next-intl/server";
 
-export default function Footer() {
+export default async function Footer() {
+  const t = await getTranslations("footer");
+
   return (
     <footer>
       <div className="mt-16 flex flex-col items-center">
@@ -16,7 +19,11 @@ export default function Footer() {
           <SocialIcon kind="facebook" href={siteMetadata.facebook} size={6} />
           <SocialIcon kind="youtube" href={siteMetadata.youtube} size={6} />
           <SocialIcon kind="linkedin" href={siteMetadata.linkedin} size={6} />
-          <SocialIcon kind="twitter" href={siteMetadata.twitter} size={6} />
+          <SocialIcon
+            kind="twitter"
+            href={siteMetadata.twitter ?? siteMetadata.x}
+            size={6}
+          />
           <SocialIcon kind="bluesky" href={siteMetadata.bluesky} size={6} />
           <SocialIcon kind="x" href={siteMetadata.x} size={6} />
           <SocialIcon kind="instagram" href={siteMetadata.instagram} size={6} />

@@ -1,6 +1,9 @@
-{ 
+{
   "lang": {
-    "locale": "en"
+    "locale": "en",
+    "label-zh": "简体中文",
+    "label-en": "English",
+    "language-select": "Language"
   },
   "desc": {
     "latest": "Latest",
@@ -30,6 +33,39 @@
   },
   "search": {
     "placeholder": "Type a command or search...",
-    "content": "CONTENT"
+    "content": "CONTENT",
+    "loading": "Loading…",
+    "no-results": "No results for your search…",
+    "esc": "ESC"
+  },
+  "a11y": {
+    "published-on": "Published on",
+    "authors": "Authors",
+    "name": "Name",
+    "twitter": "Twitter",
+    "tags": "Tags",
+    "avatar": "Avatar",
+    "search-articles": "Search articles",
+    "scroll-to-comment": "Scroll to comments",
+    "scroll-to-top": "Scroll to top",
+    "previous-post": "Previous post: {title}",
+    "next-post": "Next post: {title}",
+    "view-tagged": "View posts tagged {tag}",
+    "read-more-detail": "Read more: {title}",
+    "link-to-title": "Link to {title}",
+    "search-button": "Search"
+  },
+  "post": {
+    "discuss-twitter": "Discuss on X",
+    "view-github": "View on GitHub"
+  },
+  "list": {
+    "search-placeholder": "Search articles…",
+    "no-posts": "No posts found.",
+    "no-tags": "No tags found.",
+    "page-of": "{current} of {total}"
+  },
+  "footer": {
+    "theme-credit": "Tailwind Next.js Theme"
   }
 }

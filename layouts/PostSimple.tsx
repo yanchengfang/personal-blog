@@ -1,3 +1,5 @@
+"use client";
+
 import { ReactNode } from "react";
 import { formatDate } from "pliny/utils/formatDate";
 import { CoreContent } from "pliny/utils/contentlayer";
@@ -25,6 +27,7 @@ export default function PostLayout({
 }: LayoutProps) {
   const { path, slug, date, title } = content;
   const l = useTranslations("lang");
+  const a11y = useTranslations("a11y");
   return (
     <SectionContainer>
       <ScrollTopAndComment />
@@ -34,7 +37,7 @@ export default function PostLayout({
             <div className="space-y-1 border-b border-gray-200 pb-10 text-center dark:border-gray-700">
               <dl>
                 <div>
-                  <dt className="sr-only">Published on</dt>
+                  <dt className="sr-only">{a11y("published-on")}</dt>
                   <dd className="text-base leading-6 font-medium text-gray-500 dark:text-gray-400">
                     <time dateTime={date}>{formatDate(date, l("locale"))}</time>
                   </dd>
@@ -66,7 +69,7 @@ export default function PostLayout({
                     <Link
                       href={`/${prev.path}`}
                       className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-                      aria-label={`Previous post: ${prev.title}`}
+                      aria-label={a11y("previous-post", { title: prev.title })}
                     >
                       &larr; {prev.title}
                     </Link>
@@ -77,7 +80,7 @@ export default function PostLayout({
                     <Link
                       href={`/${next.path}`}
                       className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-                      aria-label={`Next post: ${next.title}`}
+                      aria-label={a11y("next-post", { title: next.title })}
                     >
                       {next.title} &rarr;
                     </Link>

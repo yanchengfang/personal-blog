@@ -2,36 +2,36 @@
 
 import { usePathname, useRouter } from "@/i18n/routing";
 import { useParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 
 export default function LanguageSwitcher() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams();
+  const locale = useLocale();
+  const t = useTranslations("lang");
 
-  const switchLanguage = (lang: string) => {
-    // next-intl 的 router.replace 会自动处理语言前缀，不需要手动拼接 http://localhost:3000
-    // 这将解决 Failed to fetch RSC payload 错误，因为它现在是一个正常的客户端导航
+  const switchLanguage = (nextLocale: string) => {
+    if (nextLocale === locale) return;
     router.replace(
-      // @ts-expect-error -- pathname stays the same, only locale changes
+      // @ts-expect-error pathname 与 params 保持不变，仅切换 locale
       { pathname, params },
-      { locale: lang },
+      { locale: nextLocale },
     );
   };
 
   return (
-    <div className="flex gap-4 p-4">
-      <button
-        onClick={() => switchLanguage("zh")}
-        className="px-3 py-1 text-sm font-medium text-gray-700 hover:text-primary-500 dark:text-gray-200"
+    <label className="flex items-center gap-1.5">
+      <span className="sr-only">{t("language-select")}</span>
+      <select
+        value={locale}
+        aria-label={t("language-select")}
+        onChange={(e) => switchLanguage(e.target.value)}
+        className="focus:border-primary-500 focus:ring-primary-500 h-9 cursor-pointer rounded-md border border-gray-300 bg-white py-1 pr-8 pl-2 text-sm text-gray-900 focus:ring-1 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
       >
-        简体中文
-      </button>
-      <button
-        onClick={() => switchLanguage("en")}
-        className="px-3 py-1 text-sm font-medium text-gray-700 hover:text-primary-500 dark:text-gray-200"
-      >
-        English
-      </button>
-    </div>
+        <option value="zh">{t("label-zh")}</option>
+        <option value="en">{t("label-en")}</option>
+      </select>
+    </label>
   );
 }

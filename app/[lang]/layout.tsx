@@ -6,13 +6,13 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
 import { Space_Grotesk } from "next/font/google";
 import { Analytics, AnalyticsConfig } from "pliny/analytics";
-import { SearchProvider, SearchConfig } from "pliny/search";
+import type { SearchConfig } from "pliny/search";
+import AppSearchProvider from "@/components/search/AppSearchProvider";
 import Header from "@/components/Header";
 import SectionContainer from "@/components/SectionContainer";
 import Footer from "@/components/Footer";
 import siteMetadata from "@/data/siteMetadata";
 import { ThemeProviders } from "./theme-providers";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { Metadata } from "next";
 
 const space_grotesk = Space_Grotesk({
@@ -87,19 +87,19 @@ export default async function RootLayout({
       <link
         rel="apple-touch-icon"
         sizes="76x76"
-        href={`${basePath}/static/favicons/apple-touch-icon.png`}
+        href={`${basePath}/static/favicons/favicon.png`}
       />
       <link
         rel="icon"
         type="image/png"
         sizes="32x32"
-        href={`${basePath}/static/favicons/favicon-32x32.png`}
+        href={`${basePath}/static/favicons/favicon.png`}
       />
       <link
         rel="icon"
         type="image/png"
         sizes="16x16"
-        href={`${basePath}/static/favicons/favicon-16x16.png`}
+        href={`${basePath}/static/favicons/favicon.png`}
       />
       <link
         rel="manifest"
@@ -133,13 +133,12 @@ export default async function RootLayout({
               analyticsConfig={siteMetadata.analytics as AnalyticsConfig}
             />
             <SectionContainer>
-              <SearchProvider
+              <AppSearchProvider
                 searchConfig={siteMetadata.search as SearchConfig}
               >
                 <Header />
-                <LanguageSwitcher />
                 <main className="mb-auto">{children}</main>
-              </SearchProvider>
+              </AppSearchProvider>
               <Footer />
             </SectionContainer>
           </ThemeProviders>
