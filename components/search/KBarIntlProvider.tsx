@@ -69,13 +69,13 @@ export function KBarIntlProvider({
     if (!searchDocumentsPath) {
       return;
     }
+    const docPath = searchDocumentsPath;
     let cancelled = false;
     async function load() {
       const url =
-        searchDocumentsPath.indexOf("://") > 0 ||
-        searchDocumentsPath.indexOf("//") === 0
-          ? searchDocumentsPath
-          : new URL(searchDocumentsPath, window.location.origin);
+        docPath.indexOf("://") > 0 || docPath.indexOf("//") === 0
+          ? docPath
+          : new URL(docPath, window.location.origin);
       const res = await fetch(url);
       const json = (await res.json()) as PostDoc[];
       if (!cancelled) {

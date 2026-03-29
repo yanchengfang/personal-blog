@@ -22,7 +22,8 @@
       "@/css/*": ["css/*"],
       "@/i18n/*": ["i18n/*"],
       "contentlayer/generated": ["./.contentlayer/generated"],
-      "pliny/*": ["node_modules/pliny/*"]
+      "pliny/*": ["node_modules/pliny/*"],
+      "kbar": ["node_modules/pliny/node_modules/kbar"]
     },
     "plugins": [
       {
