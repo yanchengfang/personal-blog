@@ -11,8 +11,10 @@
   "sport": "运动",
   "log": "开发者日志",
   "draft": "草稿",
+  "algorithm": "算法",
   "javascript": "JavaScript",
   "es6": "ES6",
   "react": "React",
-  "enginnering": "工程化"
+  "enginnering": "工程化",
+  "vue": "Vue"
 }

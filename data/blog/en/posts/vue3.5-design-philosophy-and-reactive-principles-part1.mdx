@@ -1,0 +1,344 @@
+---
+title: "Vue 3.5 Design Philosophy and Reactivity (Part 1)"
+date: "2026-04-04"
+lastmod: "2026-04-04"
+tags:
+  - "vue"
+summary: >-
+  Part 1: Vue's declarative model, virtual DOM, compile vs runtime, Object.defineProperty vs Proxy,
+  reactive, effect, and dependency tracking.
+---
+
+# Vue Design Philosophy
+
+1. Declarative framework
+   - You describe what the UI should look like, not how to implement it step by step.
+
+2. Virtual DOM
+   - Virtual DOM sits between declarative rendering and the real DOM.
+   - Direct DOM manipulation is expensive; vDOM diffing happens in JS, then batched updates hit the DOM. This keeps declarative UIs efficient and enables cross-platform targets (e.g. Weex, NativeScript).
+
+3. Compile time vs runtime
+   - Compile time: in tooling, `@vue/compiler-sfc` uses `@vue/compiler-dom` to compile SFC templates into render functions.
+   - Runtime (`@vue/runtime-core`): creates component instances, runs render functions, produces vDOM, and patches the real DOM.
+
+   > In Vue 3, compile and runtime are decoupled: you can hand-write render functions or use JSX (via plugins). The recommended template + compile-time optimizations keep the runtime smaller and faster.
+
+## How reactivity evolved
+
+### `Object.defineProperty`
+
+- A method to precisely control property behavior: define or modify a property with descriptors (enumerable, configurable, writable, etc.). Accessor descriptors (`get` / `set`) are the basis for property hijacking.
+- Vue mutates the original object and wraps each property with getters/setters for read/write interception.
+  > - In Vue 2, when a plain `data` object is passed to a Vue instance, Vue recursively walks all properties (including nested objects).
+  > - Each property is redefined with `Object.defineProperty` and custom `get` / `set`.
+  > - Dynamically added properties are not reactive by default (use `Vue.set`).
+  > - `delete` on properties cannot be detected (use `Vue.delete`).
+- Arrays:
+  1. Can be observed when:
+     - Index read/write if getters/setters were defined for those indices (indices are property names `"0"`, `"1"`, …).
+     - Assignments to existing indices (including implicit writes from native methods) if a setter exists—`splice` ultimately assigns by index too.
+  2. Cannot be observed when:
+     - Mutator methods (`push`, `pop`, `shift`, `unshift`, …) without interception
+     - Changing `length` (default `length` is not configurable, so you cannot redefine it)
+     - New indices added dynamically
+     - `delete arr[0]`
+
+  > For performance, Vue 2 does not walk every array index; it still observes object properties **inside** array elements.
+  > Vue 2 overrides 7 mutator methods to trigger updates manually.
+
+### `Proxy`
+
+- ES6 `Proxy` can intercept **fundamental operations** on an object (read/write, add/remove, prototype, function calls, descriptors, etc.).
+- There is no special-case branch for arrays: the array is just the `target`; index/`length` reads/writes and internal writes from methods all go through your traps.
+  > - One method call ≠ one trap; `push` / `splice` may trigger many `set` operations internally.
+  > - Vue 3’s array instrumentation (7 mutators + `includes` / `indexOf` / `lastIndexOf`) is exposed via `Proxy` `get` to `instrumentations`, not by mutating global `Array`.
+- In Vue 3:
+  > - Keep using the **proxy** returned by `reactive` / `ref` for mutations; mutating the raw object drops reactivity.
+  > - Destructuring a `reactive` object loses reactivity; use `toRefs` / `toRef` to keep refs.
+
+### Why use `Reflect.get` in `get`, not `target[key]` or `receiver[key]`
+
+```js
+const obj = {
+  a: 1,
+  get b() {
+    return this.a;
+  },
+};
+```
+
+- Reading `target[key]` for `b` binds `this` to the raw object, so `this.a` may bypass the proxy and break dependency tracking.
+- Reading `receiver[key]` re-enters the same `get` trap and can recurse until stack overflow.
+- `Reflect.get(target, key, receiver)` separates “read property” from “invoke getter” and binds `this` to the proxy (`receiver`), so `this.a` goes through the proxy again and tracking stays correct.
+
+# Reactivity internals
+
+## `reactive`: reactive objects
+
+- Makes data reactive so changes trigger updates.
+- `reactive` wraps the object in a `Proxy` and intercepts `get` / `set`.
+
+```js
+export function reactive(target) {
+  return createReactiveObject(target);
+}
+
+function createReactiveObject(target) {
+  // 检测target是否为对象
+  if (!isObject(target)) {
+    return target;
+  }
+
+  // 放置代理过的对象重复代理
+  if (target[ReactiveFlags.IS_REACTIVE]) {
+    return target;
+  }
+  // 优化：同一个对象只能代理一次
+  const existProxy = reactiveMap.get(target);
+  if (existProxy) {
+    return existProxy;
+  }
+
+  let proxy = new Proxy(target, mutableHandlers);
+  reactiveMap.set(target, proxy);
+  return proxy;
+}
+
+// in mutableHandlers
+export const mutableHandlers: ProxyHandler<any> = {
+  /**
+   *
+   * @param target 代理目标对象
+   * @param key 获取的哪个属性
+   * @param recevier 返回的代理对象
+   * @returns
+   */
+  get(target, key, recevier) {
+    if (key === ReactiveFlags.IS_REACTIVE) {
+      return true; // 响应式 get 的结果
+    }
+    // Reflect 让this指向Proxy对象（recevier），避免重复触发get，导致死循环。
+    let res = Reflect.get(target, key, recevier);
+
+    // *当取得的值也是对象的时候，对这个对象进行递归代理
+    if (isObject(res)) {
+      return reactive(res);
+    }
+    return res;
+  },
+
+  set(target, key, value, recevier) {
+    let result = Reflect.set(target, key, value, recevier);
+    return result;
+  }
+}
+```
+
+## `effect`: side effects
+
+- When **data changes**, **effects re-run**. Components, `watch`, and `computed` are built on effects.
+- In Vue 3, each component’s compiled render function is wrapped by an internal effect (render / component update effect).
+- Low-level API for plugins or custom reactivity; rarely used in app code directly.
+- Effects **link** to reactive data they read.
+
+```js
+// state is reactive
+// effect1
+effect(() => {
+  app.innerHTML = `Name ${state.name} age ${state.age}`;
+});
+// effect2
+effect(() => {
+  main.innerHTML = `Age ${state.age}`;
+});
+
+state.age++;
+```
+
+### Steps:
+
+1. Calling `effect` creates an effect instance and runs `effect.run()`.
+2. `run()` sets the global active effect and invokes the callback `fn`.
+3. Reading `state.name` triggers `get` and dep(`name`) collects `effect1`.
+4. Similarly, dep(`age`) collects both `effect1` and `effect2`.
+
+```js
+// Dependency structure (triple map)
+targetMap (WeakMap) : {
+  // original object
+  '{name: '', age: ''}' : {
+    // dep(name)
+    'name'：{
+      effect1: effect1._trackId
+    },
+    // dep(age)
+    'age': {
+      effect1: effect1._trackId,
+      effect2: effect2._trackId
+    }
+  }
+}
+
+```
+
+> `effect1._trackId`: execution generation for this effect; same effect shares the same id within one run.
+
+5. Dep is also stored on `effect.deps` for bidirectional linking.
+
+```js
+effect.deps[effect._depsLength++] = dep;
+```
+
+6. After `state.age++`, `set` on `age` runs `trigger` and schedules all effects in dep(`age`).
+
+```js
+// trigger updates
+export function triggerEffects(dep) {
+  // 将映射表中的effect拿出来依次执行
+  for (const effect of dep.keys()) {
+    if (effect.scheduler && effect._runner === 0) {
+      effect.scheduler(); // -> _effect.run() -> re-run fn
+    }
+  }
+}
+```
+
+> `effect._runner`: guards against re-entrancy; `0` means no effect is running, so triggers can proceed.
+
+## More topics
+
+### 1. Conditional rendering
+
+```js
+// state.flag === true
+effect(() => {
+  app.innerHTML = state.flag ? state.name : state.age;
+});
+
+state.flag = false;
+```
+
+1. Pre-run cleanup:
+
+```js
+function preCleanEffect(effect) {
+  effect._depsLength = 0; // 身上的依赖收集器数组的长度置空
+  effect._trackId++; // 每次执行前 trackId 都加1，如果同一个 effect 执行，trackId 就是相同的
+}
+```
+
+2. First run collects deps(`flag`, `name`) into `effect.deps`.
+3. When `flag` changes, `set` re-runs the effect.
+4. Compare new dep(`flag`) with old slot—same, reuse.
+5. Next collect dep(`age`) differs from old slot 2—remove `effect` from old dep(`name`), clean empty deps, store new dep(`age`) at position 2.
+   > `[flag, name] ===> [flag, age]`
+
+```js
+export function trackEffect(effect, dep) {
+  // 相同 trackId 则跳过收集
+  if (dep.get(effect) !== effect._trackId) {
+    // 收集到相同的依赖，只更新 trackId 的次数
+    dep.set(effect, effect._trackId);
+
+    let oldDep = effect.deps[effect._depsLength]; // 获取上次的旧 dep
+
+    if (oldDep !== dep) {
+      if (oldDep) {
+        // 删除老的
+        cleanDepEffect(oldDep, effect);
+      }
+      effect.deps[effect._depsLength++] = dep; // 永远按照本次**最新**的来存
+    } else {
+      effect._depsLength++;
+    }
+  }
+}
+
+function cleanDepEffect(dep, effect) {
+  dep.delete(effect);
+  if (dep.size === 0) {
+    dep.cleanup(); // 如果map为空，则删除这个属性
+  }
+}
+```
+
+6. Post-run cleanup trims extra deps using `_depsLength`.
+
+```js
+function postCleanEffect(effect) {
+  if (effect.deps.length > effect._depsLength) {
+    for (let i = effect._depsLength; i < effect.deps.length; i++) {
+      cleanDepEffect(effect.deps[i], effect); // 删除映射表中对应的effect
+    }
+    effect.deps.length = effect._depsLength; // 更新依赖列表的长度
+  }
+}
+```
+
+### 2. Nested effects and tracking
+
+```js
+// example: effect1
+effect(() => {
+  effect(() => {}); // effect2
+});
+// -------------------
+
+// globally track active effect
+let activeEffect;
+
+// run method
+run() {
+  let lastEffect = activeEffect; // *
+  try {
+    this._runner ++;
+    activeEffect = this;
+    preCleanEffect(this);
+    return this.fn();
+  } finally {
+    postCleanEffect(this);
+    activeEffect = lastEffect;
+    this._runner --;
+  }
+}
+```
+
+1. Older implementations used a **stack**; newer code uses `lastEffect` to restore `activeEffect` after nested runs.
+
+### 3. Effect scheduling
+
+- `scheduler` option controls whether dependency changes run `fn` immediately or via custom scheduling (e.g. `watch` `flush`).
+
+```js
+const runner = effect(
+  () => {
+    app.innerHTML = `Name ${state.name} age ${state.age}`;
+  },
+  {
+    scheduler: () => {
+      console.log("Update triggered, defer work"); // override default scheduler
+      runner(); // call runner later to flush
+    },
+  },
+);
+
+// in effect
+export function effect (fn, options?) {
+  // 创建一个effect 实例，只要依赖的属性发生变化就要执行回调scheduler，就是 run() 方法
+  const _effect = new ReactiveEffect(fn, () => {
+    // 默认 scheduler 调度器，run 方法中执行 fn()
+    _effect.run();
+  });
+
+  _effect.run();
+
+  if (options) {
+    Object.assign(_effect, options); // 将用户定义的scheduler覆盖掉内置的
+  }
+
+  const runner = _effect.run.bind(_effect);
+  runner.effect = _effect;
+  return runner; // 外面可以拿到调度执行 effect 的方法。
+}
+```

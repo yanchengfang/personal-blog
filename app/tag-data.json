@@ -10,7 +10,9 @@
     "javascript": 2,
     "document": 1,
     "es6": 1,
-    "essay": 1
+    "essay": 1,
+    "algorithm": 1,
+    "vue": 2
   },
   "zh": {
     "coding": 1,
@@ -23,6 +25,8 @@
     "javascript": 2,
     "document": 1,
     "es6": 1,
-    "essay": 1
+    "essay": 1,
+    "algorithm": 1,
+    "vue": 2
   }
 }

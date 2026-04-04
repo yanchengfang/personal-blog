@@ -1,0 +1,348 @@
+---
+title: "Vue3.5设计理念和响应式原理(上)"
+date: "2026-04-04"
+lastmod: "2026-04-04"
+tags:
+  - "vue"
+summary: >-
+  上篇：Vue 声明式与虚拟 DOM、编译与运行时，对比 defineProperty 与 Proxy，并讲解 reactive、effect 与依赖收集。
+---
+
+# VUE 设计理念
+
+1. 声明式框架
+   - 描述组件该长什么样子，不用关心具体怎么实现。
+
+2. 采用虚拟 DOM
+   - 使用虚拟 DOM 作为声明式渲染到真实 DOM 的中间层
+   - 直接操作真实 DOM 非常昂贵（性能开销大），而虚拟 DOM 是在 JS 层面进行计算和比较，再将批量更新应用回 DOM。它让 Vue 能以声明式的方式实现高效的 UI 更新，同时为跨平台（如 Weex、NativeScript）提供了可能。
+
+3. 编译时和运行时
+   - 编译时: 工程化中使用 `@vue/compiler-sfc` 调用 `@vue/compiler-dom` 模块，将 SFC 中的模板编译为渲染函数。
+   - 运行时:（@vue/runtime-core）负责创建组件实例、执行渲染函数、生成虚拟 DOM、对比并更新真实 DOM。
+
+   > 在 Vue 3 中，运行时和编译时是解耦的：你可以直接手写渲染函数（不经过模板编译），也可以使用 JSX（通过插件编译）。但官方推荐的模板 + 编译时优化，能让运行时更轻量、更快速。
+
+## 响应式实现方式的改变
+
+### Object.defineProperty：
+
+- 用于精确控制对象属性行为的方法。它可以定义一个新属性，或者修改一个已有属性，并允许设置该属性的描述符（如可枚举、可配置、可写等），其中最关键的存取描述符（get / set）正是实现对象劫持的基础
+- 直接修改原来对象，给对象的属性都添加 getter/setter 方法，进行读写时的劫持；
+  > - vue2 将一个普通 data 对象传入 Vue 实例时，Vue 会递归遍历该对象的所有属性（包括嵌套对象）。
+  > - 对每个属性调用 Object.defineProperty，替换其原有的属性描述符，加上自定义的 get 和 set。
+  > - 动态添加的属性不会自动劫持（需用 Vue.set）。
+  > - 对象属性删除（delete）无法被检测（需用 Vue.delete）。
+- 对数组操作
+  1. 可以捕获到
+     - 通过索引访问/赋值（如果预先为索引定义了 getter/setter）
+       数组索引本质上就是对象的属性名（"0"、"1"等）。你可以用 Object.defineProperty 为某个索引添加存取描述符：
+     - 劫持已有索引的赋值行为（包括通过原生方法隐式赋值）
+       如果某个索引已经定义了 setter，那么任何改变该索引值的操作（包括 arr[0]=x、arr.splice(0,1,10) 等）都会触发 setter。因为 splice 内部最终也是通过属性赋值修改索引。
+  2. 不能捕获到
+     - 数组的变异方法（push, pop, shift, unshift 等）
+     - 修改 length 属性
+       数组的 length 属性默认是 不可配置（configurable: false） 且 不可枚举，因此无法通过 Object.defineProperty 重新定义它的 getter/setter
+     - 动态新增的索引
+     - 删除属性（delete arr[0]）
+
+  > vue2 考虑到性能问题（数组可能很大，一个一个劫持索引有很大消耗），就不做监听，但是对数组中对象的属性会**对它内部属性**进行监听。
+  > vue2 中重写了 push/pop 等 7 个数组方法，手动触发响应式。
+
+### Proxy
+
+- Proxy 是 ES6 引入的一个新特性，可以拦截并重新定义对象的**基本操作**（如属性读写、增删、读写原型、函数调用、描述符相关等）
+- 原生 Proxy 对数组没有特殊分支：数组只是 target；读写下标和 length、以及方法触发的多次内部赋值，都会按你实现的 trap 规则执行；
+  > - 一次方法调用 ≠ 一次 trap，push/splice 等会在引擎内部触发多次 set
+  > - Vue 3 在数组上的补丁，核心是 7 个变异方法（统一触发与避免误 track）+ includes / indexOf / lastIndexOf（补全依赖与修正比较），都通过 Proxy get 分发到 instrumentations，而不是污染全局 Array。
+- 在 vue3 中
+  > - 保持代理的引用：在整个应用中，应始终使用由 reactive 或 ref 返回的**代理对象进行数据操作**，而不是操作原始对象，否则响应性会丢失。
+  > - 解构会丢失响应性：直接解构 reactive 对象会使其失去响应式能力。可以使用 toRefs 或 toRef API 将其转换为 ref 来保持响应性。
+
+### get 中为什么不要使用 `target[key]` 和 `receiver[key]` 要用 `Reflect`
+
+```js
+const obj = {
+  a: 1,
+  get b() {
+    return this.a;
+  },
+};
+```
+
+- 如果用 `target[key]` 取 b，this 指向原对象 obj，内部访问 this.a 会绕过代理，可能导致依赖收集不完整。
+- receiver 通常就是 Proxy 实例本身。当你读取 `receiver[key]` 时，会再次触发当前 Proxy 的 get 陷阱，导致无限递归，最终栈溢出。
+- 用 `Reflect.get(..., receiver)`，内部实现区分了“读取属性”和“调用 getter”这两个步骤，this 绑定到代理对象 receiver，**this.a 会再次走代理 get**，依赖才能正确追踪。
+
+# 响应式实现原理
+
+## reactive：定义响应式对象
+
+- 将数据变为响应式的，数据修改后检测到数据发生改变，从而让页面重新渲染
+- 每一个由 reactive 包裹的对象，都返回一个 proxy 对象，对 get/set 进行拦截。
+
+```js
+export function reactive(target) {
+  return createReactiveObject(target);
+}
+
+function createReactiveObject(target) {
+  // 检测target是否为对象
+  if (!isObject(target)) {
+    return target;
+  }
+
+  // 放置代理过的对象重复代理
+  if (target[ReactiveFlags.IS_REACTIVE]) {
+    return target;
+  }
+  // 优化：同一个对象只能代理一次
+  const existProxy = reactiveMap.get(target);
+  if (existProxy) {
+    return existProxy;
+  }
+
+  let proxy = new Proxy(target, mutableHandlers);
+  reactiveMap.set(target, proxy);
+  return proxy;
+}
+
+// in mutableHandlers
+export const mutableHandlers: ProxyHandler<any> = {
+  /**
+   *
+   * @param target 代理目标对象
+   * @param key 获取的哪个属性
+   * @param recevier 返回的代理对象
+   * @returns
+   */
+  get(target, key, recevier) {
+    if (key === ReactiveFlags.IS_REACTIVE) {
+      return true; // 响应式 get 的结果
+    }
+    // Reflect 让this指向Proxy对象（recevier），避免重复触发get，导致死循环。
+    let res = Reflect.get(target, key, recevier);
+
+    // *当取得的值也是对象的时候，对这个对象进行递归代理
+    if (isObject(res)) {
+      return reactive(res);
+    }
+    return res;
+  },
+
+  set(target, key, value, recevier) {
+    let result = Reflect.set(target, key, value, recevier);
+    return result;
+  }
+}
+```
+
+## effect：副作用函数
+
+- `数据变化后` 可以让 `effect 重新执行`，组件，watch、computed、都是基于 effect 来实现的
+- 在 Vue3 中，每个组件的模板编译成的渲染函数，会被一个内部的 effect（称为“渲染 effect”或“组件更新 effect”）自动包裹。
+- 属于底层API，编写 Vue 插件或构建自定义响应式系统，作为框架底层使用。普通业务开发基本用不到。
+- effect 会将里面的响应式数据进行**关联**
+
+```js
+// state 为响应式数据
+// effect1
+effect(() => {
+  app.innerHTML = `姓名${state.name} 年龄${state.age}`;
+});
+// effect2
+effect(() => {
+  main.innerHTML = `姓名${state.age}`;
+});
+
+state.age++;
+```
+
+### 步骤：
+
+1. 执行 effect 函数，会生成一个 effect 实例，运行 effect.run()。
+2. run(): 会将 effect 实例放入到全局，并调用 fn（effect 中的回调）执行。
+3. 执行到 `state.name` 触发 name 的 get。完成依赖收集器 `dep（name）` 对 `依赖（effect1）` 的收集。
+4. 同理，后面 dep（age）会对 effect1 和 effect2 进行挨个收集。
+
+```js
+// 依赖收集的数据结构(三 Map 结构)
+targetMap (WeakMap) : {
+  // 原始对象
+  '{name: '', age: ''}' : {
+    // 依赖收集器 dep（name）
+    'name'：{
+      effect1: effect1._trackId
+    },
+    // 依赖收集器 dep（age）
+    'age': {
+      effect1: effect1._trackId,
+      effect2: effect2._trackId
+    }
+  }
+}
+
+```
+
+> `effect1._trackId`：指的是当前 effect 的执行次数，相同 effect 中 trackId 的值相同
+
+1. 并将 dep 添加到 effect 上的 deps 数组，实现 响应式 和 依赖 的双向收集（循环引用）
+
+```js
+effect.deps[effect._depsLength++] = dep;
+```
+
+6. 在 执行到 `state.age++` 后，触发代理对象 age 的 set，并执行 trigger，将 age 的依赖（effect1、effect2）取出依次执行。
+
+```js
+// 触发更新
+export function triggerEffects(dep) {
+  // 将映射表中的effect拿出来依次执行
+  for (const effect of dep.keys()) {
+    if (effect.scheduler && effect._runner === 0) {
+      effect.scheduler(); // -> _effect.run() -> 重新执行 fn
+    }
+  }
+}
+```
+
+> `effect._runner`: 是防止 effet 中触发响应式set的标识，为 0 表示没有 effect 在执行中。可以进行触发依赖的执行更新。
+
+## 其他问题
+
+### 1. 条件渲染
+
+```js
+// state 为响应式数据 flag = true
+effect(() => {
+  app.innerHTML = state.flag ? state.name : state.age;
+});
+
+state.flag = false;
+```
+
+1. effect 执行前的前置清理
+
+```js
+function preCleanEffect(effect) {
+  effect._depsLength = 0; // 身上的依赖收集器数组的长度置空
+  effect._trackId++; // 每次执行前 trackId 都加1，如果同一个 effect 执行，trackId 就是相同的
+}
+```
+
+2. 在第一次执行挨个添加依赖收集器 dep（flag，name），并将其保存到 effect.deps
+3. flag 发生改变，触发 set 重新执行 effect。
+4. 先添加收集器 flag，与之前保存的deps中的第一个dep进行比对，发现相同，则复用。
+5. 再添加收集器 age，与之前第二个 dep 进行对比，发现不同，删除老dep（name）中的此次依赖（effect），删除后若发现 dep（name）为空，则删除dep（name）。并将新的dep（age），放到depsLength = 2 的位置。
+   > `[flag, name] ===> [flag, age]`
+
+```js
+export function trackEffect(effect, dep) {
+  // 相同 trackId 则跳过收集
+  if (dep.get(effect) !== effect._trackId) {
+    // 收集到相同的依赖，只更新 trackId 的次数
+    dep.set(effect, effect._trackId);
+
+    let oldDep = effect.deps[effect._depsLength]; // 获取上次的旧 dep
+
+    if (oldDep !== dep) {
+      if (oldDep) {
+        // 删除老的
+        cleanDepEffect(oldDep, effect);
+      }
+      effect.deps[effect._depsLength++] = dep; // 永远按照本次**最新**的来存
+    } else {
+      effect._depsLength++;
+    }
+  }
+}
+
+function cleanDepEffect(dep, effect) {
+  dep.delete(effect);
+  if (dep.size === 0) {
+    dep.cleanup(); // 如果map为空，则删除这个属性
+  }
+}
+```
+
+6. 执行完 effect 后的清理，以维护的 `_depsLength` 为准，清理掉多余的 dep。
+
+```js
+function postCleanEffect(effect) {
+  if (effect.deps.length > effect._depsLength) {
+    for (let i = effect._depsLength; i < effect.deps.length; i++) {
+      cleanDepEffect(effect.deps[i], effect); // 删除映射表中对应的effect
+    }
+    effect.deps.length = effect._depsLength; // 更新依赖列表的长度
+  }
+}
+```
+
+### 2. 嵌套 effect 的依赖收集的实现
+
+```js
+// 实例：effect1
+effect(() => {
+  effect(() => {}); // effect2
+});
+// -------------------
+
+// 全局上保存当前执行的 effect
+let activeEffect;
+
+// run方法
+run() {
+  let lastEffect = activeEffect; // *
+  try {
+    this._runner ++;
+    activeEffect = this;
+    preCleanEffect(this);
+    return this.fn();
+  } finally {
+    postCleanEffect(this);
+    activeEffect = lastEffect;
+    this._runner --;
+  }
+}
+```
+
+1. 老的版本，使用`栈`来实现，执行 effect1 进栈，执行 effect2 进栈，收集完毕挨个出栈，栈顶则是当前的 activeEffect。
+2. 新版本，用 lastEffect 记录上一次的 effect 实例，结束后再重新复制给当前 activeEffect。
+
+### 3. effect 的调度执行
+
+- effect 可以传入 scheduler 选项，控制响应式数据变化时是 `立即执行` fn 还是走 `自定义调度`（如 watch 的 flush）
+
+```js
+// 做法
+const runner = effect(
+  () => {
+    app.innerHTML = `姓名${state.name} 年龄${state.age}`;
+  },
+  {
+    scheduler: () => {
+      console.log("触发了更新，暂时不做处理"); // 切片编程思想，首先覆盖掉默认的 scheduler 执行，加上自己逻辑
+      runner(); // 拿到暴露出来的runner后，某个时刻触发更新
+    },
+  },
+);
+
+// in effect
+export function effect (fn, options?) {
+  // 创建一个effect 实例，只要依赖的属性发生变化就要执行回调scheduler，就是 run() 方法
+  const _effect = new ReactiveEffect(fn, () => {
+    // 默认 scheduler 调度器，run 方法中执行 fn()
+    _effect.run();
+  });
+
+  _effect.run();
+
+  if (options) {
+    Object.assign(_effect, options); // 将用户定义的scheduler覆盖掉内置的
+  }
+
+  const runner = _effect.run.bind(_effect);
+  runner.effect = _effect;
+  return runner; // 外面可以拿到调度执行 effect 的方法。
+}
+```

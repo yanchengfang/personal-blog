@@ -1,0 +1,315 @@
+---
+title: "Vue3.5设计理念和响应式原理(下)"
+date: "2026-04-04"
+lastmod: "2026-04-04"
+tags:
+  - "vue"
+summary: >-
+  下篇：computed 惰性求值与 Vue 3.4/3.5 更新流程差异，以及 watch 的实现与 flush 选项。
+---
+
+# computed 实现原理
+
+```js
+// 实例
+const state = reactive({ name: "zoyi" });
+
+const aliasName = computed(() => {
+  console.log("getter 执行");
+  return "**" + state.name;
+});
+
+effect(() => {
+  console.log("外层 effect 执行");
+  console.log(aliasName.value);
+});
+
+state.name = "star zoyi";
+```
+
+## 初始化
+
+1. 执行到 computed(getter) 时，返回ComputedRefImpl(getter)实例 aliasName：创建内部的 ReactiveEffect(getter, scheduler);实例（aliasName）.value 是可 get/set 的响应式。
+
+```js
+export class ComputedRefImpl {
+  constructor(getter: () => any) {
+    this.effect = new ReactiveEffect(getter, () => {
+      //...
+    });
+  }
+}
+```
+
+2. 执行 effect(fn)，创建外层 effect 实例，将 fn 添加至 schedule 中并执行。
+3. 打印 **外层 effect 执行**。 执行 aliasName.value ===> 触发内部 effect 的 get value。
+4. 在 getter 若有 activeEffect（外部 effect.run() 时保存的 activeEffect），把外层 effect 记进 aliasName.dep。
+
+```js
+get value() {
+  // 外层 effect 读取计算属性时，把外层 effect 记到本 ref 的 dep 上
+  this.trackComputed();
+  if (this._dirty === DirtyLevels.Dirty) {
+    this._dirty = DirtyLevels.NoDirty;
+    this._value = this.effect.run();
+  }
+  return this._value;
+}
+
+/** 收集「谁依赖了这个计算属性」 */
+  private trackComputed() {
+    if (!activeEffect) {
+      return;
+    }
+    this.dep ??= createDep(() => {
+      this.dep = undefined;
+    }, "computed");
+    trackEffect(activeEffect, this.dep);
+  }
+```
+
+5. 第一次 `_dirty` 默认是脏，改为不脏，并执行 `内部 effect.run()`（即包含 computed 的 getter方法的运行器）。
+6. 更新 activeEffect 为内部 effect，执行 getter，打印 **getter 执行**，`return` 中执行 `state.name` 触发 name 属性的 get，将此时 activeEffect = 内层effect，收集为依赖。返回 `name = zoyi`。
+7. getter 中 `return` 计算后属性 `@zoyi`，将值缓存到 `aliasName._value` 上，aliasName.value 的 get value 执行完毕，并返回 `_value`。
+8. 打印 **@zoyi**，外层 effect.run() 执行完毕。
+
+_此时关系是_：
+
+> state.name 的 dep → 内层 ReactiveEffect（计算属性的 scheduler）。
+> aliasName.dep → 外层 effect（读了 .value）。
+
+## 更新阶段(Vue 3.4)
+
+1. 执行 `state.name = "star zoyi"` state.name 发生改变，触发 name 的 setter。
+
+   ```js
+   set(target, key, value, recevier) {
+    let oldValue = target[key];
+    let result = Reflect.set(target, key, value, recevier);
+
+    // 只有新旧值不一样才会触发更新
+    if (oldValue !== value) {
+      trigger(target, key, value, oldValue);
+    }
+
+    return result;
+   }
+   ```
+
+2. 新旧值不一样，触发 trigger，执行收集到的内层 effect 的 scheduler。
+   - 但默认不会执行 run，只把 `_dirty` 设置为脏。
+   - triggerEffects(aliasName.dep) → 外层 effect 的 scheduler 执行 → 外层 effect 再次 run()。
+
+```js
+constructor(getter: () => any) {
+  // 不在此构造函数里立即 run：首次访问 .value 时再求值，实现惰性。
+  // scheduler：依赖变更时不立刻重算，只标脏并通知「读过我的人」去更新。
+  this.effect = new ReactiveEffect(getter, () => {
+    if (this._dirty === DirtyLevels.NoDirty) {
+      this._dirty = DirtyLevels.Dirty;
+    }
+    if (this.dep) {
+      triggerEffects(this.dep); // aliasName.dep
+    }
+  });
+}
+```
+
+3. 打印 **外层 effect 执行**，执行到 aliasName.value，再次进入其 get value 中。
+   - trackComputed() 再次把外层 effect 记到 aliasName.dep（去重逻辑在 trackEffect 里）。
+   - 发现 `_dirty` 为脏 → 执行 `this.effect.run()` → 打印 **getter 执行**，读到新 state.name，得到 `@star zoyi`，缓存进 `_value`，再标不脏。
+4. 打印 **@star zoyi**，结束更新
+
+![3.4版本](https://raw.githubusercontent.com/yanchengfang/note-assets/refs/heads/master/vue/computed-flow-3.4.png "computed-flow-3.4")
+
+## 注意：在 Vue 3.5 中 computed 的更新阶段稍微有些变化
+
+## 更新阶段(Vue 3.5)
+
+1. 执行 `state.name = "star zoyi"` state.name 发生改变，触发 name 的 setter。
+2. 新旧值不一样，触发 trigger，执行收集到的内层 effect 的 scheduler。
+3. **此时发生了变化**: 执行 `refreshComputed` -> 发现 `_dirty` 为脏，先清脏 → 执行 `this.effect.run()` → 打印 **getter 执行**，读到新 state.name，得到 `@star zoyi`，缓存进 `_value`。
+
+```js
+constructor(getter: () => any) {
+  this.effect = new ReactiveEffect(getter, () => {
+    // 3.5 风格：先置脏并同步重算，再通知下游（顺序与官方包一致）
+    this._dirty = DirtyLevels.Dirty;
+    this.refreshComputed();
+    if (this.dep) {
+      triggerEffects(this.dep); // 再执行外层 effect.run
+    }
+  });
+}
+
+/**
+ * 若当前为脏，则执行内层 effect（getter），更新 _value 并清脏。
+ */
+private refreshComputed() {
+  if (this._dirty !== DirtyLevels.Dirty) {
+    return;
+  }
+  this._dirty = DirtyLevels.NoDirty;
+  this._value = this.effect.run(); // 先执行 getter
+}
+```
+
+4. 再执行外层 effect.run，打印 **外层 effect 执行**，执行到 aliasName.value，再次进入其 get value 中。
+   - trackComputed() 再次把外层 effect 记到 aliasName.dep（去重逻辑在 trackEffect 里）。
+   - 已经计算过新的属性了，直接从 `_value` 中获取并返回。
+5. 打印 **@star zoyi**，结束更新。
+
+```js
+get value() {
+  // 收集计算属性（aliasName）的依赖，再保证缓存最新
+  this.trackComputed();
+  this.refreshComputed(); // _dirty 为不脏直接返回
+  return this._value; // 已经计算过新的属性了，直接从_value中获取
+}
+```
+
+![3.5版本](https://raw.githubusercontent.com/yanchengfang/note-assets/refs/heads/master/vue/computed-flow-new.png "computed-flow-3.5")
+
+# watch 实现原理
+
+```js
+watch(
+  { state.name }, // source
+  (prev, next, onCleanup) => { //cb
+    console.log("触发回调函数")
+
+    onCleanup(() => {
+      console.log("清理副作用函数");
+    });
+  },
+  {
+    immediate: false, // 立即执行一次
+    deep: false // 是否深度监听
+  });
+```
+
+**source 发生变化，触发 cb 的执行**
+
+即 watch 需要实现：完成 source （必须是响应式）对某个 effect 进行收集，在触发 scheduler 时，将 cb 加入到其中，将新旧值传入 cb 中。
+
+```js
+function watch(source, cb, options?) {
+  const { immediate = false, deep = false } = options;
+  const getter = createWatchGetter(source, deep);
+
+  let oldValue;
+  let cleanup;
+
+  // 初始化 effect，值变化时进行更新操作
+  const _effect = new ReactiveEffect(getter, () => {
+    const newValue = _effect.run(); // 获得最新的值
+
+    if (cleanup) {
+      cleanup();
+      cleanup = undefined;
+    }
+
+    cb(newValue, oldValue, (fn) => {
+      cleanup = fn;
+    });
+
+    oldValue = newValue;
+  });
+
+  oldValue = _effect.run();
+
+  // 立马执行一次 cb
+  if (immediate) {
+    cb(oldValue, undefined, (fn) => {
+      cleanup = fn;
+    });
+  }
+
+  return () => {
+    if (cleanup) {
+      cleanup();
+      cleanup = undefined;
+    }
+    stopEffect(_effect);
+  };
+}
+```
+
+**createWatchGetter：将 source 变为可执行的 getter，支持对 source 中的响应式属性进行依赖收集**
+
+> source 支持的类型：ref，reactive、数组（进行遍历）、函数
+
+```js
+function createWatchGetter(source: unknown, deep: boolean): () => unknown {
+  if (isRef(source)) {
+    return () => (source as { value: unknown }).value;
+  }
+  if (typeof source === "function") {
+    return source as () => unknown;
+  }
+  if (isArray(source)) {
+    return () =>
+      (source as unknown[]).map((s) => {
+        if (isRef(s)) {
+          return (s as { value: unknown }).value;
+        }
+        if (typeof s === "function") {
+          return (s as () => unknown)();
+        }
+        return s;
+      });
+  }
+  if (isReactive(source)) {
+    // deep 为 true 则深度监听，否则只监听一层
+    const maxDepth = deep ? undefined : 1;
+    return () => traverse(source, maxDepth);
+  }
+  return () => source;
+}
+```
+
+**清理函数：onCleanup 是回调的第三个参数，用来注册「下一次将要执行回调之前」或「停止监听时」会先执行的清理函数。**
+
+```js
+// 示例
+watch(
+  () => state.id,
+  (id, oldId, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+
+    fetch(`/api/user/${id}`).then((res) => {
+      if (!cancelled) {
+        state.user = res;
+      }
+    });
+  },
+);
+```
+
+**停止监听：watch 的返回值可以返回 `stopEffect`**
+
+```js
+/**
+ * 停止副作用：从各 dep 中移除并清空依赖列表，之后不再被 trigger。
+ */
+export function stopEffect(effect: ReactiveEffect) {
+  if (!effect.active) {
+    return;
+  }
+  effect.active = false; // 激活状态改为 false
+  const deps = effect.deps;
+  for (let i = 0; i < deps.length; i++) { // 并清理 effect 上的 deps
+    cleanDepEffect(deps[i], effect);
+  }
+  effect.deps.length = 0;
+}
+```
+
+**选项api：flush**
+
+- pre(默认)：在同一轮事件里稍后跑（通常仍在微任务里），多在组件重新渲染之前调度，方便你在 DOM 还没更新时读旧 DOM、或先改别的状态。
+- post：DOM 更新之后再跑，适合依赖已更新后的 DOM（例如 ref 量尺寸）。
+- sync：一触发依赖更新，就同步、立刻执行回调，不排到微任务、也不等组件更新阶段。

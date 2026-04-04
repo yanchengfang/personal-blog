@@ -11,8 +11,10 @@
   "sport": "SPORT",
   "log": "LOG",
   "draft": "DRAFT",
+  "algorithm": "ALGORITHM",
   "javascript": "JAVASCRIPT",
   "es6": "ES6",
   "react": "REACT",
-  "enginnering": "ENGINEERING"
+  "enginnering": "ENGINEERING",
+  "vue": "VUE"
 }

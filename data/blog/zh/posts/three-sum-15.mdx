@@ -1,0 +1,141 @@
+---
+title: "三数之和（题号：15）- 三指针解法"
+date: "2026-04-01"
+lastmod: "2026-04-01"
+tags:
+  - "algorithm"
+summary: >-
+  讲解 LeetCode 15 三数之和：排序后固定首元素，双指针在剩余区间凑目标和为 0，并跳过重复三元组；时间 O(n²)、空间 O(1)。
+---
+
+## 题干：
+
+给你一个整数数组 nums ，判断是否存在三元组 [nums[i], nums[j], nums[k]] 满足 i != j、i != k 且 j != k ，同时还满足 nums[i] + nums[j] + nums[k] == 0 。请你返回所有和为 0 且不重复的三元组。
+
+**注**：答案中不可以包含重复的三元组。
+
+**示例**
+
+> 输入：`nums = [-1, 0, 1, 2, -1, -4]`
+> 输出：`[[-1, -1, 2], [-1, 0, 1]]`
+
+## 解题思路：
+
+**前置要求：可以写出两数之和的双指针解法**
+
+1. 由于不需要输出下标，可以将数组排序进行遍历。nums 排序可得 `newNums`：[-4, -1, -1, 0, 1, 2]。
+2. 三数之和可以理解为：固定一个 head 指针，再用双指针完成（简化版）的`两数之和`，即：`target = 0 - newNums[head]`
+   ![threeSum](https://raw.githubusercontent.com/yanchengfang/note-assets/refs/heads/master/algorithm/threeSum.png "threeSum")
+   > 为什么说是简化版，因为**递增**的数组省却了很多步骤。
+3. 首先安排 head 指针的遍历，他是子数组的第一项，可以得出两个条件：
+   - 如果 head 的值等于（大于）0，则结束遍历，因为递增的数组，后面不可能有两数相加再等于或小于 0。
+   - head 的相同项跳过，再处理则可能会出现相同子数组或无用遍历。
+
+   ```js
+   var threeSum = function (nums) {
+     let newNums = nums.sort((a, b) => a - b);
+     let res = [];
+     for (let i = 0; i < newNums.length - 2; i++) {
+       if (nums[i] > 0) break;
+       if (i !== 0 && nums[i] === nums[i - 1]) {
+         continue;
+       }
+       let head = nums[i];
+       let l = i + 1; // 左指针
+       let r = newNums.length - 1; // 右指针
+
+       //...
+     }
+   };
+   ```
+
+4. 接下来处理左右指针的遍历，左指针不小于右指针时开始下一轮。
+
+   ```js
+   while (l < r) {
+     let resultNum = head + nums[l] + nums[r]; // 三指针所在位置之和与 0 比较
+     if (resultNum === 0) {
+       res.push([head, nums[l], nums[r]]);
+       // 当前位置既然成立，不能重复情况下，那么只有**左右都变**才会有再次成立的可能
+       r--;
+       l++;
+       continue;
+     } else if (resultNum > 0) {
+       // 总数过大：说明需要更小的数来“凑” 0，移动右指针 r
+       r--;
+     } else {
+       // 总数过小：说明需要大的数来“凑” 0，移动左指针 l
+       l++;
+     }
+   }
+   ```
+
+5. 为了避免重复，左右指针也同样跳过相同的项数。
+
+   ```js
+   while (l < r) {
+     if (l !== i + 1 && nums[l] === nums[l - 1]) {
+       // 非第一项采取检查上一项的值
+       l++;
+       continue;
+     }
+     if (r !== newNums.length - 1 && nums[r] === nums[r + 1]) {
+       // 非最后一项才去检查上一项的值
+       r--;
+       continue;
+     }
+     let resultNum = head + nums[l] + nums[r];
+     // ...
+   }
+   ```
+
+6. 左右指针靠拢，则更换 head 指针进行下一轮遍历。
+
+## 完整代码：
+
+```js
+var threeSum = function (nums) {
+  let newNums = nums.sort((a, b) => a - b);
+  let res = [];
+  for (let i = 0; i < newNums.length - 2; i++) {
+    if (nums[i] > 0) break;
+    if (i !== 0 && nums[i] === nums[i - 1]) {
+      continue;
+    }
+    let head = nums[i];
+    let l = i + 1;
+    let r = newNums.length - 1;
+    while (l < r) {
+      if (l !== i + 1 && nums[l] === nums[l - 1]) {
+        l++;
+        continue;
+      }
+      if (r !== newNums.length - 1 && nums[r] === nums[r + 1]) {
+        r--;
+        continue;
+      }
+      let resultNum = head + nums[l] + nums[r];
+      if (resultNum === 0) {
+        res.push([head, nums[l], nums[r]]);
+        r--;
+        l++;
+        continue;
+      } else if (resultNum > 0) {
+        r--;
+      } else {
+        l++;
+      }
+    }
+  }
+  return res;
+};
+
+let nums = [-1, 0, 1, 2, -1, -4];
+let nums2 = [-2, 0, 3, -1, 4, 0, 3, 4, 1, 1, 1, -3, -5, 4, 0];
+console.log(threeSum(nums2));
+```
+
+### 复杂度
+
+> - 时间复杂度：O(n^2)
+> - 空间复杂度：O(1)
