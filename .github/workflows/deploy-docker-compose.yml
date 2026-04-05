@@ -41,23 +41,15 @@ jobs:
         run: |
           docker save personal-blog:ci -o personal-blog-image.tar
 
-      - name: Pull and save nginx image (avoid VPS pull)
-        run: |
-          docker pull nginx:1.27-alpine
-          docker save nginx:1.27-alpine -o nginx-image.tar
-
       - name: Debug files before upload
         run: |
           ls -lah
-          ls -lah nginx || true
-          test -f docker-compose.yml
-          test -f nginx/default.conf
           test -f personal-blog-image.tar
-          test -f nginx-image.tar
 
+      # 仅打包应用镜像；nginx 等在 VPS 上 docker compose pull（需 VPS 能访问镜像仓库）
       - name: Package deploy bundle
         run: |
-          tar -czf deploy-bundle.tgz docker-compose.yml nginx/default.conf personal-blog-image.tar nginx-image.tar
+          tar -czf deploy-bundle.tgz personal-blog-image.tar
 
       - name: Upload to ESC (scp)
         uses: appleboy/scp-action@v0.1.7
@@ -87,24 +79,17 @@ jobs:
             # Unpack uploaded bundle
             tar -xzf "$TMP_DIR/deploy-bundle.tgz" -C "$TMP_DIR"
 
-            # 覆盖 docker-compose.yml
-            sudo cp -f "$TMP_DIR/docker-compose.yml" "$APP_DIR/docker-compose.yml"
-
-            # 覆盖 nginx 配置
-            if [ -f "$TMP_DIR/nginx/default.conf" ]; then
-              sudo cp -f "$TMP_DIR/nginx/default.conf" "$APP_DIR/nginx/default.conf"
-            else
-              # 兼容 scp-action 可能会把文件直接展开到 target 根目录
-              sudo cp -f "$TMP_DIR/default.conf" "$APP_DIR/nginx/default.conf"
+            # 生产 compose 仅存在于 VPS，CI 不再下发；首次上线请先在服务器放好 $APP_DIR/docker-compose.yml
+            if [ ! -f "$APP_DIR/docker-compose.yml" ]; then
+              echo "错误：未找到 $APP_DIR/docker-compose.yml。请先在 VPS 创建并维护该文件，本 workflow 不再从仓库同步。"
+              exit 1
             fi
 
-            # load latest image
+            # 加载本次构建的应用镜像
             sudo docker load -i "$TMP_DIR/personal-blog-image.tar"
 
-            # load nginx image to avoid network pull from docker hub
-            sudo docker load -i "$TMP_DIR/nginx-image.tar"
-
             # docker compose 可能需要 sudo；同时尝试兼容 docker-compose v1
+            # 不在此自动 pull nginx：发版只更新应用镜像，nginx 用本机已有镜像；需升级 nginx 时在 VPS 执行 docker compose pull nginx
             if sudo docker compose -f "$APP_DIR/docker-compose.yml" version >/dev/null 2>&1; then
               # Stop and remove previous containers first (free port binding)
               sudo docker compose -f "$APP_DIR/docker-compose.yml" down --remove-orphans || true

@@ -57,7 +57,12 @@ const securityHeaders = [
   },
 ];
 
-const output = process.env.EXPORT ? "export" : undefined;
+// EXPORT：静态导出；NEXT_OUTPUT_STANDALONE：Docker 等场景使用 standalone 以缩小运行时镜像
+const output = process.env.EXPORT
+  ? "export"
+  : process.env.NEXT_OUTPUT_STANDALONE === "true"
+    ? "standalone"
+    : undefined;
 const basePath = process.env.BASE_PATH || undefined;
 const unoptimized = process.env.UNOPTIMIZED ? true : undefined;
 
@@ -84,6 +89,10 @@ module.exports = () => {
       },
     },
     pageExtensions: ["ts", "tsx", "js", "jsx", "md", "mdx"],
+    // standalone 构建时显式纳入动态 import / contentlayer 生成物，避免运行时缺文件
+    outputFileTracingIncludes: {
+      "/:path*": ["./i18n/**/*", "./.contentlayer/**/*"],
+    },
     images: {
       remotePatterns: [
         {

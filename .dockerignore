@@ -1,0 +1,27 @@
+# 依赖与构建产物（镜像内由 npm ci / next build 重新生成）
+node_modules
+.next
+out
+
+# 版本管理与本地环境
+.git
+.github
+.husky
+.gitignore
+# 本地环境变量不进镜像；CI 会生成 .env.production，构建 Next 需要，勿忽略
+.env
+.env.local
+.env.development
+.env.development.local
+
+# 文档与编辑器
+*.md
+.vscode
+.idea
+
+# 测试与覆盖率
+coverage
+*.log
+
+# 宿主生成（构建时会再生成）
+.contentlayer
