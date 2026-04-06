@@ -6,6 +6,7 @@
     "start": "next dev",
     "dev": "cross-env INIT_CWD=$PWD next dev",
     "build": "cross-env INIT_CWD=$PWD next build && cross-env NODE_OPTIONS='--experimental-json-modules' node ./scripts/postbuild.mjs",
+    "build:static": "cross-env STATIC_EXPORT=true INIT_CWD=$PWD next build && cross-env NODE_OPTIONS='--experimental-json-modules' STATIC_EXPORT=true node ./scripts/postbuild.mjs",
     "serve": "next start",
     "analyze": "cross-env ANALYZE=true next build",
     "lint": "next lint --fix --dir pages --dir app --dir components --dir lib --dir layouts --dir scripts",
@@ -25,10 +26,12 @@
     "gray-matter": "^4.0.3",
     "hast-util-from-html-isomorphic": "^2.0.0",
     "image-size": "2.0.2",
+    "kbar": "0.1.0-beta.45",
     "next": "15.5.12",
     "next-contentlayer2": "0.5.8",
     "next-intl": "^4.8.3",
     "next-themes": "^0.4.6",
+    "personal-blog": "link:",
     "pliny": "0.4.1",
     "postcss": "^8.5.6",
     "react": "19.2.4",
@@ -70,11 +73,11 @@
   },
   "lint-staged": {
     "*.+(js|jsx|ts|tsx)": [
-      "npx eslint --fix"
+      "npx eslint --fix --no-warn-ignored"
     ],
     "*.+(js|jsx|ts|tsx|json|css|md|mdx)": [
       "npx prettier --write"
     ]
   },
-  "packageManager": "yarn@3.6.1"
+  "packageManager": "pnpm@9.15.4"
 }

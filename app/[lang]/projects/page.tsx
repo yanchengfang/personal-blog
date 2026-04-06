@@ -1,4 +1,4 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
+﻿import { getTranslations, setRequestLocale } from "next-intl/server";
 import projectsData from "@/data/projectsData";
 import Card from "@/components/Card";
 import { genPageMetadata } from "app/seo";

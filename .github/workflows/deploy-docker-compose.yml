@@ -1,12 +1,10 @@
-#在 GitHub Actions 里显示的名字，方便在列表里识别。
-name: Personal Blog Deploy (Docker Compose)
+# 静态站点：pnpm build（output: export）→ 打包 out/ → 同步到 VPS 的 /var/www/personal-blog（nginx 由你自行配置）
+name: Personal Blog Deploy (Static Export)
 
-# 只有往 master 分支推送代码时才会触发部署。其它分支 push 不会跑这个 workflow
 on:
   push:
     branches: [master]
 
-# 设置并发，避免同时部署多个 workflow。只跑最新 push 的 workflow。
 concurrency:
   group: deploy-master
   cancel-in-progress: true
@@ -21,8 +19,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 与本地 .env.production 等价：构建前写入，供 docker 内 next build 加载
-      - name: Write .env.production for Docker build
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 与本地 .env.production 等价：构建前写入，供 next build 加载 NEXT_PUBLIC_*
+      - name: Write .env.production for build
         run: |
           {
             echo "NEXT_PUBLIC_GISCUS_REPO=${{ secrets.NEXT_PUBLIC_GISCUS_REPO }}"
@@ -31,91 +43,52 @@ jobs:
             echo "NEXT_PUBLIC_GISCUS_CATEGORY_ID=${{ secrets.NEXT_PUBLIC_GISCUS_CATEGORY_ID }}"
           } > .env.production
 
-      - name: Build Next.js docker image
-        run: |
-          docker build -t personal-blog:ci \
-            --build-arg BASE_PATH="${{ secrets.BASE_PATH }}" \
-            .
+      - name: Build static export
+        env:
+          STATIC_EXPORT: "true"
+          BASE_PATH: ${{ secrets.BASE_PATH }}
+        run: pnpm run build
 
-      - name: Save docker image
+      - name: Package out directory
         run: |
-          docker save personal-blog:ci -o personal-blog-image.tar
+          test -d out
+          tar -czf site.tgz -C out .
 
-      - name: Debug files before upload
-        run: |
-          ls -lah
-          test -f personal-blog-image.tar
-
-      # 仅打包应用镜像；nginx 等在 VPS 上 docker compose pull（需 VPS 能访问镜像仓库）
-      - name: Package deploy bundle
-        run: |
-          tar -czf deploy-bundle.tgz personal-blog-image.tar
-
-      - name: Upload to ESC (scp)
+      - name: Upload bundle to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: deploy-bundle.tgz
+          source: site.tgz
           target: /tmp/personal-blog-deploy
 
-      - name: Deploy on ESC (ssh)
+      - name: Deploy static files on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 60m
+          command_timeout: 30m
           script: |
             set -e
+            TARGET="/var/www/personal-blog"
+            TMP="/tmp/personal-blog-deploy/site.tgz"
 
-            APP_DIR="/opt/personal-blog"
-            TMP_DIR="/tmp/personal-blog-deploy"
+            sudo mkdir -p "$TARGET"
+            sudo tar -xzf "$TMP" -C "$TARGET"
+            sudo rm -f "$TMP"
+            # 静态资源由 nginx 提供；若需特定用户请改下面一行
+            sudo chown -R www-data:www-data "$TARGET" 2>/dev/null || true
+            echo "Deployed to $TARGET"
 
-            sudo mkdir -p "$APP_DIR"
-            sudo mkdir -p "$APP_DIR/nginx"
-
-            # Unpack uploaded bundle
-            tar -xzf "$TMP_DIR/deploy-bundle.tgz" -C "$TMP_DIR"
-
-            # 生产 compose 仅存在于 VPS，CI 不再下发；首次上线请先在服务器放好 $APP_DIR/docker-compose.yml
-            if [ ! -f "$APP_DIR/docker-compose.yml" ]; then
-              echo "错误：未找到 $APP_DIR/docker-compose.yml。请先在 VPS 创建并维护该文件，本 workflow 不再从仓库同步。"
-              exit 1
-            fi
-
-            # 加载本次构建的应用镜像
-            sudo docker load -i "$TMP_DIR/personal-blog-image.tar"
-
-            # docker compose 可能需要 sudo；同时尝试兼容 docker-compose v1
-            # 不在此自动 pull nginx：发版只更新应用镜像，nginx 用本机已有镜像；需升级 nginx 时在 VPS 执行 docker compose pull nginx
-            if sudo docker compose -f "$APP_DIR/docker-compose.yml" version >/dev/null 2>&1; then
-              # Stop and remove previous containers first (free port binding)
-              sudo docker compose -f "$APP_DIR/docker-compose.yml" down --remove-orphans || true
-              sudo docker compose -f "$APP_DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
-            else
-              # Stop and remove previous containers first (free port binding)
-              sudo docker-compose -f "$APP_DIR/docker-compose.yml" down --remove-orphans || true
-              sudo docker-compose -f "$APP_DIR/docker-compose.yml" up -d --force-recreate --remove-orphans
-            fi
-
-      - name: Health check on VPS
+      - name: Health check (static index)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 10m
+          command_timeout: 5m
           script: |
             set -e
-            for i in 1 2 3 4 5; do
-              if curl -fsS "http://127.0.0.1/zh/" >/dev/null; then
-                echo "Health check passed."
-                exit 0
-              fi
-              echo "Health check failed, retry $i/5..."
-              sleep 5
-            done
-            echo "Health check failed after retries."
-            exit 1
+            test -f /var/www/personal-blog/zh/index.html && echo "OK: zh index exists"

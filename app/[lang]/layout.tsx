@@ -12,8 +12,14 @@ import Header from "@/components/Header";
 import SectionContainer from "@/components/SectionContainer";
 import Footer from "@/components/Footer";
 import siteMetadata from "@/data/siteMetadata";
+import { locales } from "@/i18n/routing";
 import { ThemeProviders } from "./theme-providers";
 import { Metadata } from "next";
+
+/** 为 `[lang]` 段枚举所有语言，子路由共享静态生成（首页 /about /projects /blog /tags 等） */
+export async function generateStaticParams() {
+  return locales.map((lang) => ({ lang }));
+}
 
 const space_grotesk = Space_Grotesk({
   subsets: ["latin"],

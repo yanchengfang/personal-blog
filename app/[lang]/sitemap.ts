@@ -1,8 +1,13 @@
 import { MetadataRoute } from "next";
 import { allBlogs } from "contentlayer/generated";
 import siteMetadata from "@/data/siteMetadata";
+import { locales } from "@/i18n/routing";
 
 export const dynamic = "force-static";
+
+export async function generateStaticParams() {
+  return locales.map((lang) => ({ lang }));
+}
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const siteUrl = siteMetadata.siteUrl;

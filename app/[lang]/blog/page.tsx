@@ -1,4 +1,4 @@
-import { setRequestLocale } from "next-intl/server";
+﻿import { setRequestLocale } from "next-intl/server";
 import { allCoreContent, sortPosts } from "pliny/utils/contentlayer";
 import { allBlogs } from "contentlayer/generated";
 import { genPageMetadata } from "app/seo";

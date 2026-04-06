@@ -6,12 +6,13 @@ import ListLayout from "@/layouts/ListLayoutWithTags";
 import { allBlogs } from "contentlayer/generated";
 import tagData from "app/tag-data.json";
 import { genPageMetadata } from "app/seo";
+import { locales } from "@/i18n/routing";
 import { Metadata } from "next";
 
 const POSTS_PER_PAGE = 5;
 
 export async function generateMetadata(props: {
-  params: Promise<{ tag: string }>;
+  params: Promise<{ lang: string; tag: string }>;
 }): Promise<Metadata> {
   const params = await props.params;
   const tag = decodeURI(params.tag);
@@ -27,12 +28,18 @@ export async function generateMetadata(props: {
   });
 }
 
+// 按语言从 tag-data 展开真实标签名，与 /tags/[tag]/page/[page] 中 encodeURI(tag) 约定一致
 export const generateStaticParams = async () => {
-  const tagCounts = tagData;
-  const tagKeys = Object.keys(tagCounts);
-  return tagKeys.map((tag) => ({
-    tag: encodeURI(tag),
-  }));
+  const tagDataRecord = tagData as Record<string, Record<string, number>>;
+  return locales.flatMap((lang) => {
+    const langTags = tagDataRecord[lang] || {};
+    return Object.keys(langTags)
+      .filter((tagKey) => (langTags[tagKey] ?? 0) > 0)
+      .map((tagKey) => ({
+        lang,
+        tag: encodeURI(tagKey),
+      }));
+  });
 };
 
 export default async function TagPage(props: {

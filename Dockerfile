@@ -3,20 +3,24 @@ FROM node:22-alpine AS builder
 # 部分原生依赖在 Alpine 上需要兼容库
 RUN apk add --no-cache libc6-compat
 
+# 使用 Corepack 与 package.json 中的 packageManager 字段锁定 pnpm 版本
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+
 ARG BASE_PATH=""
 ENV BASE_PATH=$BASE_PATH
-# 与 next.config.js 中 output: standalone 对应，仅构建阶段需要
+# 仓库默认 next build 为 output: export；构建镜像时需 standalone，故仅在此阶段开启
 ENV NEXT_OUTPUT_STANDALONE=true
 
 # Giscus 等 NEXT_PUBLIC_*：由仓库根目录 .env.production 提供（本地或 CI 从 Secrets 生成）；勿在此处写空 ENV，否则会覆盖 .env.production
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci && npm cache clean --force
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile && pnpm store prune
 
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM node:22-alpine AS runner
 

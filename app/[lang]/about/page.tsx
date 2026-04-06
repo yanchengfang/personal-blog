@@ -1,4 +1,4 @@
-import { setRequestLocale } from "next-intl/server";
+﻿import { setRequestLocale } from "next-intl/server";
 import { Authors, allAuthors } from "contentlayer/generated";
 import { MDXLayoutRenderer } from "pliny/mdx-components";
 import AuthorLayout from "@/layouts/AuthorLayout";

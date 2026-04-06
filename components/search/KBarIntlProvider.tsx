@@ -14,6 +14,7 @@ type PostDoc = {
   summary?: string;
   date: string;
   slug: string;
+  language?: string;
 };
 
 type KBarSearchProps = {
@@ -24,7 +25,8 @@ type KBarSearchProps = {
 
 function buildActions(
   posts: PostDoc[],
-  sectionLabel: string,
+  sectionLabelByLanguage: Record<string, string>,
+  locale: string,
   dateLocale: string,
   navigate: (href: string) => void,
   customMap?: (json: PostDoc[]) => Action[],
@@ -34,6 +36,9 @@ function buildActions(
   }
   const actions: Action[] = [];
   for (const post of posts) {
+    const language = post.language === "zh" ? "zh" : "en";
+    const sectionLabel =
+      sectionLabelByLanguage[language] ?? sectionLabelByLanguage[locale];
     actions.push({
       id: post.path,
       name: post.title,
@@ -55,12 +60,19 @@ export function KBarIntlProvider({
 }) {
   const router = useRouter();
   const locale = useLocale();
-  const t = useTranslations("search");
+  const tSearch = useTranslations("search");
+  const tLang = useTranslations("lang");
   const { searchDocumentsPath, defaultActions, onSearchDocumentsLoad } =
     kbarConfig;
 
   const dateLocale = locale === "zh" ? "zh-CN" : "en-US";
-  const sectionLabel = t("content");
+  const sectionLabelByLanguage = useMemo(
+    () => ({
+      zh: `${tSearch("content")} · ${tLang("label-zh")}`,
+      en: `${tSearch("content")} · ${tLang("label-en")}`,
+    }),
+    [tSearch, tLang],
+  );
 
   const [rawPosts, setRawPosts] = useState<PostDoc[]>([]);
   const [fetchDone, setFetchDone] = useState(() => !searchDocumentsPath);
@@ -89,19 +101,29 @@ export function KBarIntlProvider({
     };
   }, [searchDocumentsPath]);
 
-  const searchActions = useMemo(
-    () =>
-      rawPosts.length
-        ? buildActions(
-            rawPosts,
-            sectionLabel,
-            dateLocale,
-            (href) => router.push(href),
-            onSearchDocumentsLoad,
-          )
-        : [],
-    [rawPosts, sectionLabel, dateLocale, router, onSearchDocumentsLoad],
-  );
+  const searchActions = useMemo(() => {
+    if (!rawPosts.length) {
+      return [];
+    }
+    const filteredPosts = rawPosts.filter(
+      (post) => (post.language === "zh" ? "zh" : "en") === locale,
+    );
+    return buildActions(
+      filteredPosts,
+      sectionLabelByLanguage,
+      locale,
+      dateLocale,
+      (href) => router.push(href),
+      onSearchDocumentsLoad,
+    );
+  }, [
+    rawPosts,
+    sectionLabelByLanguage,
+    locale,
+    dateLocale,
+    router,
+    onSearchDocumentsLoad,
+  ]);
 
   return (
     <KBarProvider actions={defaultActions}>

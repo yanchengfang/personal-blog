@@ -1,4 +1,12 @@
 const path = require("path");
+// pnpm 下 kbar 常在根 node_modules，不一定存在 pliny/node_modules/kbar
+const kbarRoot = (() => {
+  try {
+    return path.dirname(require.resolve("kbar/package.json"));
+  } catch {
+    return path.resolve(__dirname, "node_modules/pliny/node_modules/kbar");
+  }
+})();
 const { withContentlayer } = require("next-contentlayer2");
 const createNextIntlPlugin = require("next-intl/plugin");
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
@@ -20,51 +28,60 @@ const ContentSecurityPolicy = `
 `;
 
 const securityHeaders = [
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
   {
     key: "Content-Security-Policy",
     value: ContentSecurityPolicy.replace(/\n/g, ""),
   },
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy
   {
     key: "Referrer-Policy",
     value: "strict-origin-when-cross-origin",
   },
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
   {
     key: "X-Frame-Options",
     value: "DENY",
   },
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options
   {
     key: "X-Content-Type-Options",
     value: "nosniff",
   },
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-DNS-Prefetch-Control
   {
     key: "X-DNS-Prefetch-Control",
     value: "on",
   },
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
   {
     key: "Strict-Transport-Security",
     value: "max-age=31536000; includeSubDomains",
   },
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Feature-Policy
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
 ];
 
-// EXPORT：静态导出；NEXT_OUTPUT_STANDALONE：Docker 等场景使用 standalone 以缩小运行时镜像
-const output = process.env.EXPORT
-  ? "export"
-  : process.env.NEXT_OUTPUT_STANDALONE === "true"
+// STATIC_EXPORT/EXPORT：CI 或显式静态发布时启用 output: export（此时无 redirects，由 nginx 处理根路径）
+// 本地 next dev / 默认 next build：不设 output，保留 redirects（/ → /zh/）
+// Docker 镜像：NEXT_OUTPUT_STANDALONE=true → standalone
+const isStaticExport =
+  process.env.STATIC_EXPORT === "true" || process.env.EXPORT === "true";
+
+const output =
+  process.env.NEXT_OUTPUT_STANDALONE === "true"
     ? "standalone"
-    : undefined;
+    : isStaticExport
+      ? "export"
+      : undefined;
+const isExport = output === "export";
+const isStandalone = output === "standalone";
+
 const basePath = process.env.BASE_PATH || undefined;
-const unoptimized = process.env.UNOPTIMIZED ? true : undefined;
+const unoptimized = process.env.UNOPTIMIZED
+  ? true
+  : isExport
+    ? true
+    : undefined;
+
+// 与 i18n/routing.ts 中 defaultLocale 保持一致（无 middleware 时根路径依赖此重定向）
+const DEFAULT_LOCALE = "zh";
 
 /**
  * @type {import('next/dist/next-server/server/config').NextConfig}
@@ -76,10 +93,24 @@ module.exports = () => {
     basePath,
     reactStrictMode: true,
     trailingSlash: true,
+    // 静态导出（output: export）不支持 redirects；根路径 / 请在 nginx 重定向到 /zh/
+    ...(isExport
+      ? {}
+      : {
+          async redirects() {
+            return [
+              {
+                source: "/",
+                destination: `/${DEFAULT_LOCALE}/`,
+                permanent: false,
+              },
+            ];
+          },
+        }),
     turbopack: {
       root: process.cwd(),
       resolveAlias: {
-        kbar: path.resolve(__dirname, "node_modules/pliny/node_modules/kbar"),
+        kbar: kbarRoot,
       },
       rules: {
         "*.svg": {
@@ -89,10 +120,14 @@ module.exports = () => {
       },
     },
     pageExtensions: ["ts", "tsx", "js", "jsx", "md", "mdx"],
-    // standalone 构建时显式纳入动态 import / contentlayer 生成物，避免运行时缺文件
-    outputFileTracingIncludes: {
-      "/:path*": ["./i18n/**/*", "./.contentlayer/**/*"],
-    },
+    ...(isStandalone
+      ? {
+          // standalone 构建时显式纳入动态 import / contentlayer 生成物
+          outputFileTracingIncludes: {
+            "/:path*": ["./i18n/**/*", "./.contentlayer/**/*"],
+          },
+        }
+      : {}),
     images: {
       remotePatterns: [
         {
@@ -102,19 +137,24 @@ module.exports = () => {
       ],
       unoptimized,
     },
-    async headers() {
-      return [
-        {
-          source: "/(.*)",
-          headers: securityHeaders,
-        },
-      ];
-    },
+    // 静态导出不支持通过 next.config 的 headers 注入 CSP，请在 nginx 配置
+    ...(isExport
+      ? {}
+      : {
+          async headers() {
+            return [
+              {
+                source: "/(.*)",
+                headers: securityHeaders,
+              },
+            ];
+          },
+        }),
     webpack: (config, options) => {
-      // 与 pliny 共用嵌套的 kbar，供本地搜索组件 import
+      // 与 pliny 共用 kbar；路径随包管理器变化，用解析结果而非写死嵌套目录
       config.resolve.alias = {
         ...config.resolve.alias,
-        kbar: path.resolve(__dirname, "node_modules/pliny/node_modules/kbar"),
+        kbar: kbarRoot,
       };
 
       config.module.rules.push({

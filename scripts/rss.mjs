@@ -7,7 +7,14 @@ import tagData from "../app/tag-data.json" with { type: "json" };
 import { allBlogs } from "../.contentlayer/generated/index.mjs";
 import { sortPosts } from "pliny/utils/contentlayer.js";
 
-const outputFolder = process.env.EXPORT ? "out" : "public";
+// standalone → public；静态导出 → out；普通 build → public
+const outputFolder = (() => {
+  if (process.env.NEXT_OUTPUT_STANDALONE === "true") return "public";
+  if (process.env.STATIC_EXPORT === "true" || process.env.EXPORT === "true") {
+    return "out";
+  }
+  return "public";
+})();
 
 const generateRssItem = (config, post) => `
   <item>
