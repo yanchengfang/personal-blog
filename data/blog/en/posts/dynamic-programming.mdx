@@ -1,0 +1,121 @@
+---
+title: "Dynamic Programming Basics"
+date: "2026-04-08"
+lastmod: "2026-04-08"
+tags:
+  - "algorithm"
+summary: >-
+  This intro to dynamic programming uses Coin Change to explain state definition, transition
+  formula, base cases, and iteration order, then validates with manual walkthroughs to build a
+  full DP problem-solving mindset.
+---
+
+## Why learn it?
+
+- At first, while practicing algorithms, I stayed in the "comfort zone" of greedy and brute-force solutions.
+- Then I met problems like `Coin Change`, `House Robber`, and `Longest Increasing Subsequence`.
+- I started to realize conventional approaches were not enough. Even when logic was correct, I got:
+
+  **Passed, but inefficiently**:
+
+  ![inefficient-algorithm](https://raw.githubusercontent.com/yanchengfang/note-assets/refs/heads/master/algorithm/find-anagrams-v2.png "inefficient-algorithm")
+
+  **or**:
+
+  ![exceeding-output-limit](https://raw.githubusercontent.com/yanchengfang/note-assets/refs/heads/master/algorithm/exceeding-output-limit.png "exceeding-output-limit")
+
+**To resolve these awkward scenarios, I started to focus on optimization and encountered dynamic programming.**
+
+## What is it?
+
+Dynamic Programming (DP) solves problems by reducing global goals to local subproblems, avoiding repeated computation and reusing previously solved results to efficiently obtain the final global answer.
+
+## Five-step method
+
+```js
+// Example: the i-th Fibonacci number
+const dp = [0, 1, 1, 2, 3, 5, .... dp[i] ];
+```
+
+1. Define the state: what does `dp[i]` represent?
+   > What status/result should the `i`-th item in `dp` represent.
+2. Write the state transition: how does current state come from smaller states?
+   > `dp[i] = dp[i-1] + dp[i-2]`
+3. Initialize base cases: the smallest subproblems.
+   > Similar to induction: initialize item 0 and item 1.
+4. Determine traversal order (forward/backward): ensure dependencies are computed first.
+5. Run a small manual example to verify transitions.
+
+## Practice: Coin Change (322)
+
+**Problem**: Given an integer array `coins` representing coin denominations, and an integer `amount` as total value, return the minimum number of coins needed to make up that amount. If no combination can make it up, return `-1`. You may assume each coin can be used infinitely many times.
+
+> Input: `coins = [1, 2, 5], amount = 11`
+> Output: `3` (`11 = 5 + 5 + 1`)
+
+### Steps
+
+1. State definition: define `dp` and `dp[i]`
+   - `dp[i]` means the minimum number of coins needed for amount `i` (if reachable), where `i` goes from 0 to 11.
+   - Initialize `dp` as `[Infinity, Infinity ... Infinity]` with length 12.
+     > At first we do not know whether most amounts are reachable, so `Infinity` is a good unreachable sentinel.
+
+2. State transition:
+   - Think: is the minimum for amount 11 related to smaller amounts (10, 9 ... 1, 0)?
+   - `dp[11]` can come from:
+
+     > `11 - 1 = dp[10] + 1`
+     > `11 - 2 = dp[9] + 1`
+     > `11 - 5 = dp[6] + 1`
+
+   - Therefore:
+
+   ```js
+   for (let j = 0; j < coins.length; j++) {
+     if (i >= coins[j]) {
+       dp[i] = Math.min(dp[i], dp[i - coins[j]] + 1);
+     }
+   }
+   ```
+
+   > Try subtracting each coin denomination and keep the minimum.
+
+3. Boundary initialization: when `i = 0`, minimum coins is 0.
+
+   > `dp[0] = 0`
+
+4. Loop order:
+
+   > Start from `i = 1` and iterate through the `dp` array in forward order.
+
+5. Validation:
+   - When `i = 1`:
+     > inner loop with coin 1: `dp[1] = Math.min(dp[1], dp[1 - 1] + 1) = Math.min(Infinity, 1) = 1;`
+     > end inner loop: `dp[1] = 1`
+   - When `i = 2`:
+     > inner loop with coin 1: `dp[2] = Math.min(dp[2], dp[2 - 1] + 1) = Math.min(Infinity, 2) = 2;`
+     > inner loop with coin 2: `dp[2] = Math.min(dp[2], dp[2 - 2] + 1) = Math.min(2, 1) = 1;`
+     > end inner loop: `dp[2] = 1`
+
+### Sample code
+
+```js
+function coinChange(coins, amount) {
+  const dp = new Array(amount + 1).fill(Infinity);
+  dp[0] = 0;
+
+  for (let i = 1; i < dp.length; i++) {
+    for (let j = 0; j < coins.length; j++) {
+      if (i >= coins[j]) {
+        dp[i] = Math.min(dp[i], dp[i - coins[j]] + 1);
+      }
+    }
+  }
+  return dp[amount] === Infinity ? -1 : dp[amount];
+}
+```
+
+> - Time complexity: `O(amount * coins.length)`
+> - Space complexity: `O(amount)`
+
+**Summary: the key to DP is always two steps: first “split the problem” (define states), then “find relationships” (write transitions). In practice, it is very template-friendly.**

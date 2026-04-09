@@ -1,0 +1,150 @@
+---
+title: "ASCII, Unicode, UTF-8, and Base64"
+date: "2026-04-09"
+lastmod: "2026-04-09"
+tags:
+  - "popularization"
+summary: >-
+  A practical overview of ASCII, GBK, Unicode, UTF-8, and Base64: how character-to-binary mapping
+  works, differences between code point and code unit, plus encoding rules, trade-offs, and common
+  application scenarios.
+---
+
+# Encoding
+
+<h3>Mapping between characters and binary</h3>
+
+## ASCII
+
+- In ASCII, each character always uses 1 byte (8 bits). So if text contains only ASCII characters, character count equals byte count.
+  > For example, `hello` is 5 bytes.
+- It maps digits, English letters, and common symbols into the range 0-127.
+  > The highest bit is 0, and the remaining 7 bits are for actual encoding, so `2^7 = 128`.
+  > For example, decimal code of `h` is 104, binary is `0110 1000`.
+
+### ASCII table
+
+![ASCII](https://p0-xtjj-private.juejin.cn/tos-cn-i-73owjymdk6/246c5db711bd48699d2e836a5557a157~tplv-73owjymdk6-jj-mark-v1:0:0:0:0:5o6Y6YeR5oqA5pyv56S-5Yy6IEAg5LmY5pa5:q75.awebp?policy=eyJ2bSI6MywidWlkIjoiNDQ1MDQ1ODIzMTEyMTU5MSJ9&rk3s=e9ecf3d6&x-orig-authkey=f32326d3454f2ac7e96d3d06cdbb035152127018&x-orig-expires=1775807019&x-orig-sign=%2FEk4%2BOPlpTZ04fGeKupS0Dl5QaE%3D "ASCII")
+
+## GBK / ANSI
+
+- A double-byte encoding, so at most `2^16 = 65535` characters can be represented.
+
+  > “GBK maps to double-byte” mainly applies to non-English characters such as Chinese and Japanese; English letters are still often 1 byte.
+
+## Unicode
+
+- GBK with two bytes can represent only 65535 characters, while all scripts in the world far exceed that (Chinese alone has over 55,000), so 3, 4, or even more bytes may be needed for one character.
+- Therefore `Unicode` appeared: it defines a unique integer for each valid character, called a **code point**. These code points are usually written in **hexadecimal** with prefix `U+`. Unicode can cover more than one million characters (including emoji).
+  > Strictly speaking, Unicode is an abstract mapping (a character set), not a concrete encoding format.
+
+### Why `length` can be confusing
+
+**Character**: usually a Unicode code point.  
+**Grapheme**: what users visually perceive as one character; it may contain multiple code points, e.g. combined accents, flags, emoji.  
+**Code unit**: the smallest storage chunk in a specific encoding.
+
+> - UTF-16: one code unit is 16 bits. JavaScript / Java / C# use UTF-16-based string models (with language-specific details).
+> - `str.length` in JS counts UTF-16 code units, not code points, and not grapheme clusters.
+> - Unicode divides code points into planes. In BMP (Basic Multilingual Plane), one character is usually 1 UTF-16 code unit; in supplementary planes (many emoji), one character usually needs 2 code units.
+> - So in JS, many emoji and characters like `𠮷` may appear to have length 2.
+
+## UTF-8
+
+- If each character always used 3 bytes, English (which can be represented in 1 byte) would be wasteful. So Unicode needs compressed encodings such as UTF-8, UTF-16, UTF-32.
+- UTF-8’s key feature is **variable length**: it uses 1 to 4 bytes per symbol based on the symbol itself, improving storage efficiency.
+
+|   `A`   |  Unicode code point  |               UTF-8                |       UTF-16        |
+| :-----: | :------------------: | :--------------------------------: | :-----------------: |
+|   Hex   |        U+0041        |                0x41                |       0x0041        |
+| Decimal |          65          |                 65                 |         65          |
+|  In JS  | `'A'.codePointAt(0)` | `new TextEncoder().encode("A")[0]` | `'A'.charCodeAt(0)` |
+| Binary  | 0000 0000 0100 0001  |             0100 0001              | 0000 0000 0100 0001 |
+
+### UTF-8 encoding rules
+
+1.  For 1-byte symbols, the highest bit is 0, and the remaining 7 bits store the Unicode code point. So for English letters, UTF-8 equals ASCII.
+2.  For n-byte symbols (`n > 1`), the first byte starts with n ones followed by a zero; following bytes start with `10`. Remaining bits are filled with bits of the code point.
+
+**The table below summarizes the rules (`x` means available bit):**
+
+| Unicode range (hex) | UTF-8 format (binary)               |
+| ------------------: | :---------------------------------- |
+| 0000 0000-0000 007F | 0xxxxxxx (same as ASCII)            |
+| 0000 0080-0000 07FF | 110xxxxx 10xxxxxx                   |
+| 0000 0800-0000 FFFF | 1110xxxx 10xxxxxx 10xxxxxx          |
+| 0001 0000-0010 FFFF | 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx |
+
+> - Take Chinese character `严`, whose Unicode code point is `4E25` (`1001110 00100101`). Since `4E25` falls in `0000 0800-0000 FFFF`, UTF-8 needs three bytes: `1110xxxx 10xxxxxx 10xxxxxx`.
+> - Fill bits from the end of the code point into the `x` slots from right to left, and pad with zeros if needed.
+> - You get UTF-8 bytes `11100100 10111000 10100101`, i.e. hex `E4 B8 A5`.
+
+## Base64 encoding
+
+### Principle
+
+1.  First convert characters to binary, so Base64 output depends on the character encoding chosen in this intermediate step.
+2.  Concatenate bytes and process every 3 bytes (24 bits) as one group.
+3.  Split into four 6-bit chunks; if final chunk is short, pad with `0`.
+4.  Convert each 6-bit chunk to decimal and map by Base64 table.
+    > 6 bits can represent `2^6 = 64` values, covering uppercase/lowercase letters (52), digits (10), `+`, and `/`.
+5.  If final Base64 length is not a multiple of 4, pad with `=`.
+
+#### Simulated implementation
+
+```js
+const base64Chars =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function base64Encode(str) {
+  // UTF-8 is commonly used and storage-efficient
+  const bytes = new TextEncoder().encode(str); // [228, 184, 150, 74], where 世 takes 3 bytes and J takes 1
+  let binary = "";
+  for (const b of bytes) binary += b.toString(2).padStart(8, "0");
+
+  let result = "";
+  for (let i = 0; i < binary.length; i += 6) {
+    let chunk = binary.slice(i, i + 6);
+    if (chunk.length < 6) chunk = chunk.padEnd(6, "0");
+    result += base64Chars[parseInt(chunk, 2)];
+  }
+
+  const pad = (4 - (result.length % 4)) % 4;
+  return result + "=".repeat(pad);
+}
+const char = "世J";
+console.log(base64Encode(char)); // 5LiWSg==
+```
+
+### Pros and cons of Base64
+
+- Pros
+
+1.  Base64 converts arbitrary binary data into ASCII-safe printable text, which is important in transmission and storage.
+    > In email, URL, JSON, and HTTP headers, raw bytes often conflict with control characters or protocol restrictions.
+    > Base64 chooses 64 safe characters and trades about 33% expansion for compatibility.
+2.  Can reduce request count in some scenarios.
+    > This was more obvious in HTTP/1.1.
+    > With HTTP/2 and HTTP/3 multiplexing, this advantage is smaller now.
+    > Inline Base64 is still useful for tiny icons or avoiding extra requests.
+
+**Why can Base64 be text while raw bytes are usually considered binary stream?**
+
+- The key is not “6-bit vs 8-bit”, but what symbols you map bits to.
+- Base64 maps data to printable characters (`A-Z a-z 0-9 + / =`). These have clear text representations in UTF-8/ASCII, so they can live in JSON, HTML, or email bodies as text.
+- Raw 8-bit bytes can be any value 0-255, including many control or non-printable values. They may be misinterpreted by text protocols, so they are usually handled as binary streams.
+
+- Cons
+
+1.  Base64 usually increases size by about 33% (3 bytes raw data -> 4 bytes Base64 text).
+    > In memory/disk, each Base64 char usually occupies 8 bits.
+2.  Base64 resources are often cached together with HTML/CSS/JS, so cache reuse is less granular than independent image files.
+3.  Base64 strings are not human-readable and decoding introduces extra CPU cost (usually small).
+4.  Base64 is not encryption; it can be directly decoded.
+
+### Use cases
+
+- Inline small assets, e.g. icons in HTML/CSS via data URL: `<img src="data:image/png;base64,...">`.
+- Put binary data into text-friendly channels, e.g. email, JSON/XML fields, logs, config files.
+- Token/signature text, e.g. JWT segments (often Base64URL variant).
+- Transfer small binary snippets in URL/form fields (often Base64URL to avoid `+` and `/`).

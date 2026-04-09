@@ -9,6 +9,11 @@
     "build:static": "cross-env STATIC_EXPORT=true INIT_CWD=$PWD next build && cross-env NODE_OPTIONS='--experimental-json-modules' STATIC_EXPORT=true node ./scripts/postbuild.mjs",
     "serve": "next start",
     "analyze": "cross-env ANALYZE=true next build",
+    "perf:lh:desktop": "pnpm exec lhci collect --url=https://blog.summerylaker.site/zh/ --numberOfRuns=3 --settings.preset=desktop --settings.onlyCategories=performance --upload.target=filesystem --upload.outputDir=.lighthouseci/desktop",
+    "perf:lh:mobile": "pnpm exec lhci collect --url=https://blog.summerylaker.site/zh/ --numberOfRuns=3 --settings.formFactor=mobile --settings.screenEmulation.mobile=true --settings.onlyCategories=performance --upload.target=filesystem --upload.outputDir=.lighthouseci/mobile",
+    "perf:lh:desktop:url": "pnpm exec lhci collect --numberOfRuns=3 --settings.preset=desktop --settings.onlyCategories=performance --upload.target=filesystem --upload.outputDir=.lighthouseci/desktop",
+    "perf:lh:mobile:url": "pnpm exec lhci collect --numberOfRuns=3 --settings.formFactor=mobile --settings.screenEmulation.mobile=true --settings.onlyCategories=performance --upload.target=filesystem --upload.outputDir=.lighthouseci/mobile",
+    "perf:lh": "pnpm run perf:lh:desktop && pnpm run perf:lh:mobile",
     "lint": "next lint --fix --dir pages --dir app --dir components --dir lib --dir layouts --dir scripts",
     "prepare": "husky"
   },
@@ -54,6 +59,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.3",
     "@eslint/js": "^9.18.0",
+    "@lhci/cli": "^0.15.1",
     "@svgr/webpack": "^8.1.0",
     "@types/mdx": "^2.0.13",
     "@types/react": "^19.2.13",

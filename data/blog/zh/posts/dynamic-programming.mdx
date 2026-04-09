@@ -1,0 +1,119 @@
+---
+title: "动态规划入门"
+date: "2026-04-08"
+lastmod: "2026-04-08"
+tags:
+  - "algorithm"
+summary: >-
+  以零钱兑换题为例讲解动态规划入门：先定义状态、写转移方程、设定边界与遍历方向，再通过手推验证结果，帮助建立从拆解问题到复用子问题解的完整思路。
+---
+
+## 为什么要学？
+
+- 起初刷算法一直沉溺于贪心和暴力解的我，仿佛找到了“舒适区”。
+- 直到遇到了 `零钱兑换`、`打家劫舍`、`最长递增子序列` 这些题目。
+- 开始发现常规解法力不从心了，就算逻辑正确，但会出现：
+
+  **低效通过**：
+
+  ![inefficient-algorithm](https://raw.githubusercontent.com/yanchengfang/note-assets/refs/heads/master/algorithm/find-anagrams-v2.png "inefficient-algorithm")
+
+  **或者是**：
+
+  ![exceeding-output-limit](https://raw.githubusercontent.com/yanchengfang/note-assets/refs/heads/master/algorithm/exceeding-output-limit.png "exceeding-output-limit")
+
+**为了解决这些尴尬的场景，产生了优化算法的意识，接触到了动态规划**
+
+## 是什么？
+
+动态规划（Dynamic Programming，简称 DP），解决问题的核心思想是把全局的问题聚焦到局部的实现上，避免重复计算，通过复用已计算的子问题结果，最终高效得到全局解。
+
+## 五步走
+
+```js
+// 示例：求斐波那契数列的第 i 项
+const dp = [0, 1, 1, 2, 3, 5, .... dp[i] ];
+```
+
+1. 写出状态定义：dp[i] 代表什么
+   > dp 数组在第 i 项时所要表达的什么状态。
+2. 写状态转移式：当前状态怎么由更小状态推出来
+   > dp[i] = dp[i-1] + dp[i-2]
+3. 初始值：最小子问题 `base case`
+   > 类似于数学归纳法，初始化第 0 项和第 1 项。
+4. 确定遍历方向（正序/倒序）：保证用到的子问题先算好。
+5. 代入小样例手推一遍（防止转移错）。
+
+## 例题实践：零钱兑换（322）
+
+**题目**：给你一个整数数组 coins ，表示不同面额的硬币；以及一个整数 amount ，表示总金额。计算并返回可以凑成总金额所需的 最少的硬币个数 。如果没有任何一种硬币组合能组成总金额，返回 -1 。你可以认为每种硬币的数量是无限的。
+
+> 输入：coins = [1, 2, 5], amount = 11
+> 输出：3；（11 = 5 + 5 +1）
+
+### 步骤：
+
+1. 状态定义：确定 dp 数组 和 `dp[i]`
+   - `dp[i]` 表示凑出金额 i 所需的最少硬币数（能否兑换出来不确定），**i 则是当前兑换的 amount，一直到 11。**
+   - 定义dp数组：`[Infinity, Infinity ... Infinity]`，长度为 12（因为要取到第 11 项目）
+     > 一开始我们还不知道大多数金额能不能凑出来，所以先把它们标记成“当前不可达”。`Infinity` 就是最合适的“不可达哨兵值”
+
+2. 状态转移：
+   - 思考：求兑换出 11 的最少硬币组合，会和前面局部 amount （10、9 ... 1、0）存在某种联系？
+   - `dp[11]` 的结果可以是
+
+     > `11 - 1 = dp[10] + 1`
+     > `11 - 2 = dp[9] + 1`
+     > `11 - 5 = dp[6] + 1`
+
+   - 可得：
+
+   ```js
+   for (let j = 0; j < coins.length; j++) {
+     if (i >= coins[j]) {
+       dp[i] = Math.min(dp[i], dp[i - coins[j]] + 1);
+     }
+   }
+   ```
+
+   > 挨个减去硬币面额，取最小的为最终值。
+
+3. 初始化边界：i = 0 时：可兑换的组合为 0；
+
+   > `dp[0] = 0`
+
+4. 确定循环：
+
+   > 从 i = 1 开始，遍历 dp 数组；确定 dp[i] 的值，正序需要 11 次；
+
+5. 验证：
+   - i = 1 时：
+     > 内层 j = 1：`dp[1] = Math.min(dp[1], dp[1 - 1] + 1) = Math.min(Infinity, 1) = 1;`
+     > 结束内层循环：`dp[1] = 1`
+   - i = 2 时：
+     > 内层 j = 1：`dp[2] = Math.min(dp[2], dp[2 - 1] + 1) = Math.min(Infinity, 2) = 2;`
+     > 内层 j = 2：`dp[2] = Math.min(dp[2], dp[2 - 2] + 1) = Math.min(2, 1) = 1;`
+     > 结束内层循环：`dp[2] = 1`
+
+### 示例代码：
+
+```js
+function coinChange(coins, amount) {
+  const dp = new Array(amount + 1).fill(Infinity);
+  dp[0] = 0;
+
+  for (let i = 1; i < dp.length; i++) {
+    for (let j = 0; j < coins.length; j++) {
+      if (i >= coins[j]) {
+        dp[i] = Math.min(dp[i], dp[i - coins[j]] + 1);
+      }
+    }
+  }
+  return dp[amount] === Infinity ? -1 : dp[amount]; // 兑换失败的则是 Infinity 返回 -1 即可
+}
+```
+
+> - 时间复杂度：`O(amount * coins.length)`
+> - 空间复杂度：`O(amount)`
+
+**总结：动态规划的关键始终是这两步：先“拆问题”（定义状态）、再“找关系”（写转移）。说是 “套模板” 也不为过。**
