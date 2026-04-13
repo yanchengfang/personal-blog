@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { slug } from "github-slugger";
 import { allTags } from "contentlayer/generated";
 import { useTranslations } from "next-intl";
