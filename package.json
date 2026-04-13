@@ -79,10 +79,10 @@
   },
   "lint-staged": {
     "*.+(js|jsx|ts|tsx)": [
-      "npx eslint --fix --no-warn-ignored"
+      "pnpm exec eslint --fix --no-warn-ignored"
     ],
     "*.+(js|jsx|ts|tsx|json|css|md|mdx)": [
-      "npx prettier --write"
+      "pnpm exec prettier --write"
     ]
   },
   "packageManager": "pnpm@9.15.4"

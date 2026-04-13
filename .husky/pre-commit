@@ -1,1 +1,29 @@
-npx --no-install lint-staged
+#!/usr/bin/env sh
+# #region agent log
+# 调试：记录 husky 触发时 node/npx 与 PATH，用于定位 npx: command not found
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -z "$REPO_ROOT" ] && REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOG_FILE="$REPO_ROOT/debug-3e5bd2.log"
+NODE_CANDIDATE="$(command -v node 2>/dev/null || echo "")"
+NPX_CANDIDATE="$(command -v npx 2>/dev/null || echo "")"
+NODE_DIR=""
+NPX_LS=""
+if [ -n "$NODE_CANDIDATE" ]; then
+  NODE_DIR="$(dirname "$NODE_CANDIDATE")"
+  NPX_LS="$(ls -1 "$NODE_DIR"/npx* 2>/dev/null | tr '\n' ' ')"
+fi
+if command -v node >/dev/null 2>&1; then
+  node -e "const fs=require('fs');const p=process.argv[1];const o={sessionId:'3e5bd2',runId:'pre-fix',hypothesisId:'H1-H4',location:'.husky/pre-commit',message:'husky hook 环境探测',data:{node:process.argv[2],npx:process.argv[3],nodeDir:process.argv[4],npxFiles:process.argv[5],path:process.env.PATH||''},timestamp:Date.now()};fs.appendFileSync(p,JSON.stringify(o)+'\n');" "$LOG_FILE" "$NODE_CANDIDATE" "$NPX_CANDIDATE" "$NODE_DIR" "$NPX_LS" || true
+else
+  printf '%s\n' "{\"sessionId\":\"3e5bd2\",\"runId\":\"pre-fix\",\"hypothesisId\":\"H2\",\"location\":\".husky/pre-commit\",\"message\":\"hook 内未找到 node\",\"data\":{\"npx\":\"$NPX_CANDIDATE\"},\"timestamp\":$(($(date +%s)*1000))}" >> "$LOG_FILE" || true
+fi
+# #endregion
+# 使用 pnpm exec，避免 GUI Git /非登录 shell 下缺少 fnm 注入的 npx shim
+pnpm exec lint-staged
+EC=$?
+# #region agent log
+if command -v node >/dev/null 2>&1; then
+  node -e "const fs=require('fs');const p=process.argv[1];const ec=parseInt(process.argv[2],10)||0;const o={sessionId:'3e5bd2',runId:'post-fix',hypothesisId:'verify',location:'.husky/pre-commit',message:'lint-staged 执行结果',data:{exitCode:ec},timestamp:Date.now()};fs.appendFileSync(p,JSON.stringify(o)+'\n');" "$LOG_FILE" "$EC" || true
+fi
+# #endregion
+exit "$EC"
